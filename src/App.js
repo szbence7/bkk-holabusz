@@ -52,6 +52,26 @@ const createBusIcon = (bearing) => {
   });
 };
 
+// Custom stop icon - white circle with BKV blue border
+const createStopIcon = () => {
+  return new L.DivIcon({
+    html: `
+      <div style="
+        width: 16px;
+        height: 16px;
+        background-color: white;
+        border: 3px solid #1e88e5;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      "></div>
+    `,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+    popupAnchor: [0, -11],
+    className: 'bkv-stop-marker'
+  });
+};
+
 const BKK_API_BASE = 'https://futar.bkk.hu/api/query/v1/ws/otp/api/where';
 const DEFAULT_STOP_ID = 'BKK_F04797';
 const API_KEY = 'ca61c2f4-982e-4460-aebd-950c15434919';
@@ -159,28 +179,53 @@ const translateStatus = (status) => {
   return statusTranslations[status] || status;
 };
 
-// Komponens a térkép automatikus zoom-olásához (csak egyszer, betöltéskor)
-function AutoFitBounds({ vehicles }) {
+// Komponens a térkép automatikus zoom-olásához
+function AutoFitBounds({ vehicles, currentStopId, stopPosition }) {
   const map = useMap();
+  const [lastStopId, setLastStopId] = useState(currentStopId);
   const [hasAutoFitted, setHasAutoFitted] = useState(false);
   
   useEffect(() => {
-    if (vehicles.length > 0 && !hasAutoFitted) {
-      const bounds = L.latLngBounds(vehicles.map(v => [v.lat, v.lng]));
-      
-      // Kis padding a szélekhez
-      const paddedBounds = bounds.pad(0.1);
-      
-      // Csak akkor fit-eljük, ha van legalább egy jármű ÉS még nem csináltuk meg
-      map.fitBounds(paddedBounds, {
-        maxZoom: 15, // Maximum zoom szint
-        animate: true,
-        duration: 1
-      });
+    // Ha új megálló lett kiválasztva, reseteljük az auto-fit státuszt
+    if (currentStopId !== lastStopId) {
+      setHasAutoFitted(false);
+      setLastStopId(currentStopId);
+    }
+  }, [currentStopId, lastStopId]);
+  
+  useEffect(() => {
+    if (!hasAutoFitted && (vehicles.length > 0 || stopPosition)) {
+      // Ha vannak járművek, használjuk azokat a bounds-hoz
+      if (vehicles.length > 0) {
+        const allPoints = vehicles.map(v => [v.lat, v.lng]);
+        
+        // Ha van megálló pozíció is, adjuk hozzá
+        if (stopPosition) {
+          allPoints.push([stopPosition.lat, stopPosition.lng]);
+        }
+        
+        const bounds = L.latLngBounds(allPoints);
+        
+        // Kis padding a szélekhez
+        const paddedBounds = bounds.pad(0.1);
+        
+        map.fitBounds(paddedBounds, {
+          maxZoom: 15, // Maximum zoom szint
+          animate: true,
+          duration: 1
+        });
+      } 
+      // Ha nincs jármű, de van megálló pozíció, arra zoom-oljunk
+      else if (stopPosition) {
+        map.setView([stopPosition.lat, stopPosition.lng], 14, {
+          animate: true,
+          duration: 1
+        });
+      }
       
       setHasAutoFitted(true); // Jelöljük, hogy már megtörtént az auto-fit
     }
-  }, [vehicles, map, hasAutoFitted]);
+  }, [vehicles, stopPosition, map, hasAutoFitted]);
   
   return null; // Ez egy invisible komponens
 }
@@ -199,6 +244,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [currentStopPosition, setCurrentStopPosition] = useState(null);
   const searchContainerRef = useRef(null);
 
   const fetchDepartures = async () => {
@@ -302,6 +348,75 @@ function App() {
     } catch (error) {
       console.error('Error loading main stop name:', error);
       setMainStopName(`Megálló ${currentStopId.replace('BKK_', '')}`);
+    }
+  };
+
+  const loadStopPosition = async (stopId) => {
+    try {
+      // Initialize stops data if not loaded yet
+      if (!window.stopsData) {
+        const response = await fetch('/stops.txt');
+        const text = await response.text();
+        const lines = text.split('\n');
+        
+        // Parse CSV data properly handling quoted strings
+        window.stopsData = {};
+        window.stopsPositions = {};
+        for (let i = 1; i < lines.length; i++) { // Skip header
+          const line = lines[i].trim();
+          if (line) {
+            // Parse CSV line properly handling quoted fields
+            const parts = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let j = 0; j < line.length; j++) {
+              const char = line[j];
+              
+              if (char === '"') {
+                inQuotes = !inQuotes;
+              } else if (char === ',' && !inQuotes) {
+                parts.push(current);
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+            parts.push(current); // Add the last part
+            
+            if (parts.length >= 4) {
+              const stopIdFromFile = parts[0].replace(/"/g, ''); // Remove quotes
+              const stopName = parts[1].replace(/"/g, ''); // Remove quotes
+              const stopLat = parseFloat(parts[2]);
+              const stopLon = parseFloat(parts[3]);
+              
+              window.stopsData[stopIdFromFile] = stopName;
+              if (!isNaN(stopLat) && !isNaN(stopLon)) {
+                window.stopsPositions[stopIdFromFile] = { lat: stopLat, lng: stopLon };
+              }
+            }
+          }
+        }
+        console.log('Loaded stops positions:', Object.keys(window.stopsPositions).length, 'stops with coordinates');
+      }
+
+      // Clean the stopId - remove BKK_ prefix
+      let cleanStopId = stopId.replace('BKK_', '').replace(/^D/, ''); // Remove BKK_ prefix and D prefix
+      
+      // Try to find the stop position
+      const position = window.stopsPositions[cleanStopId];
+      
+      if (position) {
+        console.log('Found stop position:', position, 'for stopId:', stopId, '(clean:', cleanStopId, ')');
+        setCurrentStopPosition(position);
+      } else {
+        console.log('Stop position not found for:', stopId, '(clean:', cleanStopId, ')');
+        setCurrentStopPosition(null);
+      }
+      
+    } catch (error) {
+      console.error('Error loading stop position:', error);
+      setCurrentStopPosition(null);
     }
   };
 
@@ -444,6 +559,7 @@ function App() {
 
   useEffect(() => {
     loadMainStopName(); // Load main stop name first
+    loadStopPosition(currentStopId); // Load stop position
     fetchDepartures();
     fetchVehiclePositions();
     setCountdown(5);
@@ -552,6 +668,7 @@ function App() {
   const selectStop = (stopId, stopName) => {
     setCurrentStopId(stopId);
     setMainStopName(stopName);
+    loadStopPosition(stopId); // Load new stop position
     setSearchQuery('');
     setShowSearchResults(false);
     setSearchResults([]);
@@ -1174,19 +1291,39 @@ function App() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
           
-          {/* Automatikus zoom a járművekre */}
-          <AutoFitBounds vehicles={(() => {
-            const smartFilteredVehicles = vehiclePositions.filter(vehicle => {
-              const vehicleTripId = vehicle.tripId?.replace('BKK_', '') || '';
-              const tripIdMatch = departures.some(dep => {
-                const depTripId = dep.tripId?.replace('BKK_', '') || '';
-                return depTripId === vehicleTripId;
+          {/* Automatikus zoom a járművekre és megállóra */}
+          <AutoFitBounds 
+            currentStopId={currentStopId}
+            stopPosition={currentStopPosition}
+            vehicles={(() => {
+              const smartFilteredVehicles = vehiclePositions.filter(vehicle => {
+                const vehicleTripId = vehicle.tripId?.replace('BKK_', '') || '';
+                const tripIdMatch = departures.some(dep => {
+                  const depTripId = dep.tripId?.replace('BKK_', '') || '';
+                  return depTripId === vehicleTripId;
+                });
+                const routeIdMatch = departures.some(dep => dep.routeId === vehicle.routeId);
+                return tripIdMatch || routeIdMatch;
               });
-              const routeIdMatch = departures.some(dep => dep.routeId === vehicle.routeId);
-              return tripIdMatch || routeIdMatch;
-            });
-            return smartFilteredVehicles;
-          })()} />
+              return smartFilteredVehicles;
+            })()} 
+          />
+
+          {/* Megálló marker */}
+          {currentStopPosition && (
+            <Marker 
+              position={[currentStopPosition.lat, currentStopPosition.lng]}
+              icon={createStopIcon()}
+            >
+              <Popup>
+                <div>
+                  <strong>{mainStopName || currentStopId.replace('BKK_', '')}</strong>
+                  <br />
+                  <small>Megálló ID: {currentStopId}</small>
+                </div>
+              </Popup>
+            </Marker>
+          )}
           
           {/* Busz markerek - csak azok, amik a kijelzőn is láthatók */}
           {(() => {
