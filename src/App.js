@@ -141,25 +141,6 @@ function App() {
     };
   }, []);
 
-  if (loading) {
-    return (
-      <div className="app">
-        <h1>BKK Bus Tracker - F04797</h1>
-        <p>Betöltés...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="app">
-        <h1>BKK Bus Tracker - F04797</h1>
-        <p className="error">Hiba történt: {error}</p>
-        <button onClick={fetchDepartures}>Újrapróbálás</button>
-      </div>
-    );
-  }
-
   // Dotmatrix font definitions (5x7 pixel matrix)
   const dotMatrixFont = {
     '0': [
@@ -710,33 +691,10 @@ function App() {
 
   return (
     <div className="app">
-      <h1>BKK Bus Tracker - F04797</h1>
-      <p className="subtitle">Következő 1 órában induló járatok</p>
-      
-      {departures.length === 0 ? (
-        <p>Nincsenek induló járatok a következő 1 órában.</p>
-      ) : (
-        <table className="departures-table">
-          <thead>
-            <tr>
-              <th>Járat</th>
-              <th>Perc múlva</th>
-            </tr>
-          </thead>
-          <tbody>
-            {departures.map((departure, index) => (
-              <tr key={index}>
-                <td className="route">{departure.routeId}</td>
-                <td className="time">{departure.displayTime}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      
       {/* Dotmatrix Display */}
       <div className="dotmatrix-container">
-        <h2>Dot Matrix Kijelző</h2>
+        <h1 style={{color: 'white'}}>BKK Bus Tracker - {STOP_ID.replace('BKK_', '')}</h1>
+        <p className="subtitle" style={{color: 'white'}}>Következő 1 órában induló járatok</p>
         {renderDotMatrixDisplay()}
       </div>
       
