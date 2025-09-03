@@ -126,6 +126,13 @@ button:hover {
   overflow-x: auto; /* Horizontal scroll ha szükséges */
 }
 
+.dotmatrix-container h1 {
+  margin-top: 0px;
+  text-align: center;
+  margin-bottom: 20px;
+  letter-spacing: 2px;
+}
+
 /* Mobile optimalizálás dotmatrix-hez */
 @media (max-width: 768px) {
   .dotmatrix-container {
@@ -285,8 +292,8 @@ button:hover {
 .map-container h2 {
   color: #ff8800;
   text-align: center;
+  margin-top: 0px;
   margin-bottom: 20px;
-  text-transform: uppercase;
   letter-spacing: 2px;
 }
 

@@ -56,17 +56,94 @@ const BKK_API_BASE = 'https://futar.bkk.hu/api/query/v1/ws/otp/api/where';
 const STOP_ID = 'BKK_F04797';
 const API_KEY = 'ca61c2f4-982e-4460-aebd-950c15434919';
 
-// Function to get stop name from stop ID
-const getStopName = (stopId) => {
-  // Known stop mappings - you can expand this
-  const stopMappings = {
-    '044603': 'Solymár, temető',
-    '570655': 'Solymár, temető',
-    'BKK_F04797': 'Központi pályaudvar',
-    // Add more mappings as needed
-  };
-  
-  return stopMappings[stopId] || `Megálló ${stopId}`;
+// Function to get stop name from local stops.txt file
+const getStopName = async (stopId) => {
+  try {
+    // First check if we have it cached
+    if (window.stopNameCache && window.stopNameCache[stopId]) {
+      return window.stopNameCache[stopId];
+    }
+    
+    // Initialize cache if it doesn't exist
+    if (!window.stopNameCache) {
+      window.stopNameCache = {};
+    }
+    
+    // Initialize stops data if not loaded yet
+    if (!window.stopsData) {
+      try {
+        const response = await fetch('/stops.txt');
+        const text = await response.text();
+        const lines = text.split('\n');
+        
+        // Parse CSV data properly handling quoted strings
+        window.stopsData = {};
+        for (let i = 1; i < lines.length; i++) { // Skip header
+          const line = lines[i].trim();
+          if (line) {
+            // Parse CSV line properly handling quoted fields
+            const parts = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let j = 0; j < line.length; j++) {
+              const char = line[j];
+              
+              if (char === '"') {
+                inQuotes = !inQuotes;
+              } else if (char === ',' && !inQuotes) {
+                parts.push(current);
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+            parts.push(current); // Add the last part
+            
+            if (parts.length >= 2) {
+              const stopIdFromFile = parts[0].replace(/"/g, ''); // Remove quotes
+              const stopName = parts[1].replace(/"/g, ''); // Remove quotes
+              window.stopsData[stopIdFromFile] = stopName;
+            }
+          }
+        }
+        console.log('Loaded stops data:', Object.keys(window.stopsData).length, 'stops');
+      } catch (error) {
+        console.error('Error loading stops.txt:', error);
+        window.stopsData = {};
+      }
+    }
+    
+    console.log('Looking for stop name for:', stopId);
+    
+    // Clean the stopId - remove BKK_ prefix and any other prefixes
+    let cleanStopId = stopId.replace('BKK_', '').replace(/^D/, ''); // Remove BKK_ prefix and D prefix
+    
+    // Try to find the stop name
+    let stopName = window.stopsData[cleanStopId];
+    
+    if (stopName) {
+      console.log('Found stop name:', stopName, 'for stopId:', stopId, '(clean:', cleanStopId, ')');
+    } else {
+      console.log('Stop not found in stops.txt for:', stopId, '(clean:', cleanStopId, ')');
+      // Fallback to known mappings
+      const stopMappings = {
+        '044602': 'Solymár, temető',
+        '044603': 'Solymár, temető',
+        '570655': 'Solymár, temető',
+        'BKK_F04797': 'Központi pályaudvar',
+      };
+      
+      stopName = stopMappings[stopId] || `Megálló ${stopId}`;
+    }
+    
+    window.stopNameCache[stopId] = stopName;
+    return stopName;
+    
+  } catch (error) {
+    console.error('Error fetching stop name:', error);
+    return `Megálló ${stopId}`;
+  }
 };
 
 // Function to translate current status
@@ -116,6 +193,8 @@ function App() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [vehiclePositions, setVehiclePositions] = useState([]);
   const [debugLogged, setDebugLogged] = useState(false);
+  const [stopNames, setStopNames] = useState({});
+  const [mainStopName, setMainStopName] = useState(null);
 
   const fetchDepartures = async () => {
     try {
@@ -229,6 +308,46 @@ function App() {
     }
     
     return departures.sort((a, b) => a.minutesUntil - b.minutesUntil);
+  };
+
+  const loadMainStopName = async () => {
+    if (!mainStopName) {
+      try {
+        const stopName = await getStopName(STOP_ID);
+        setMainStopName(stopName);
+        console.log('Main stop name loaded:', stopName);
+      } catch (error) {
+        console.error('Error loading main stop name:', error);
+        setMainStopName(`Megálló ${STOP_ID.replace('BKK_', '')}`);
+      }
+    }
+  };
+
+  const loadStopNames = async (vehicles) => {
+    const newStopNames = { ...stopNames };
+    let hasNewNames = false;
+    
+    // Load stop names for all unique stop IDs
+    const uniqueStopIds = [...new Set(vehicles.map(v => v.stopId).filter(Boolean))];
+    
+    for (const stopId of uniqueStopIds) {
+      if (!newStopNames[stopId]) {
+        try {
+          console.log('Loading stop name for:', stopId);
+          const stopName = await getStopName(stopId);
+          newStopNames[stopId] = stopName;
+          hasNewNames = true;
+          console.log('Loaded stop name:', stopId, '->', stopName);
+        } catch (error) {
+          console.error('Error loading stop name for', stopId, ':', error);
+        }
+      }
+    }
+    
+    if (hasNewNames) {
+      setStopNames(newStopNames);
+      console.log('Updated stop names:', newStopNames);
+    }
   };
 
   const fetchVehiclePositions = async () => {
@@ -361,6 +480,7 @@ function App() {
   };
 
   useEffect(() => {
+    loadMainStopName(); // Load main stop name first
     fetchDepartures();
     fetchVehiclePositions();
     setCountdown(5);
@@ -380,6 +500,13 @@ function App() {
       clearInterval(countdownInterval);
     };
   }, []);
+
+  // Load stop names when vehicle positions change
+  useEffect(() => {
+    if (vehiclePositions.length > 0) {
+      loadStopNames(vehiclePositions);
+    }
+  }, [vehiclePositions]);
 
   // Dotmatrix font definitions (5x7 pixel matrix)
   const dotMatrixFont = {
@@ -934,7 +1061,7 @@ function App() {
     <div className="app">
       {/* Dotmatrix Display */}
       <div className="dotmatrix-container">
-        <h1 style={{color: 'white'}}>BKK Bus Tracker - {STOP_ID.replace('BKK_', '')}</h1>
+        <h1 style={{color: 'white'}}>{mainStopName || STOP_ID.replace('BKK_', '')}</h1>
         {renderDotMatrixDisplay()}
       </div>
       
@@ -1036,7 +1163,7 @@ function App() {
                     })()}
                   </div>
                   {vehicle.label && <div><strong>Célállomás:</strong> {vehicle.label}</div>}
-                  {vehicle.stopId && <div><strong>Következő megálló:</strong> {getStopName(vehicle.stopId)}</div>}
+                  {vehicle.stopId && <div><strong>Következő megálló:</strong> {stopNames[vehicle.stopId] || `Megálló ${vehicle.stopId}`}</div>}
                   {vehicle.currentStatus && <div><strong>Státusz:</strong> {translateStatus(vehicle.currentStatus)}</div>}
                   {vehicle.licensePlate && <div><strong>Rendszám:</strong> {vehicle.licensePlate}</div>}
                   {vehicle.vehicleModel && <div><strong>Típus:</strong> {vehicle.vehicleModel}</div>}
