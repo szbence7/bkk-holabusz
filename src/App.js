@@ -803,7 +803,7 @@ function App() {
           // Column 1: Route number (4 chars wide, left-aligned)
           const routeColumn = routeText.padEnd(4, ' ');
           
-          // Column 2: Direction (mobilon rövidebb, asztali gépen hosszabb)
+          // Column 2: Direction (mobilon rövidebb, asztali gépen megfelelő)
           const directionMaxLength = window.innerWidth <= 768 ? 12 : 16;
           const directionColumn = direction.substring(0, directionMaxLength).padEnd(directionMaxLength, ' ');
           
@@ -849,7 +849,6 @@ function App() {
       {/* Dotmatrix Display */}
       <div className="dotmatrix-container">
         <h1 style={{color: 'white'}}>BKK Bus Tracker - {STOP_ID.replace('BKK_', '')}</h1>
-        <p className="subtitle" style={{color: 'white'}}>Következő 1 órában induló járatok</p>
         {renderDotMatrixDisplay()}
       </div>
       

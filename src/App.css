@@ -1,9 +1,12 @@
+body {
+  background-color: black;
+}
+
 .app {
   max-width: 600px;
   margin: 0 auto;
   padding: 20px;
   font-family: Arial, sans-serif;
-  background-color: white;
   color: black;
   min-height: 100vh;
   box-sizing: border-box;
@@ -80,7 +83,7 @@ button {
   display: block;
   margin: 20px auto;
   padding: 10px 20px;
-  background-color: #007bff;
+  background-color: #ffffff;
   color: white;
   border: none;
   border-radius: 4px;
@@ -89,7 +92,7 @@ button {
 }
 
 button:hover {
-  background-color: #0056b3;
+  background-color: #ffffff;
 }
 
 .update-info {
@@ -106,7 +109,7 @@ button:hover {
 }
 
 .countdown {
-  color: #007bff;
+  color: #ffffff;
   font-size: 14px;
   font-weight: bold;
 }
@@ -117,8 +120,8 @@ button:hover {
   background-color: #1a1a1a;
   border-radius: 8px;
   border: 2px solid #333;
-  width: 100%;
-  max-width: 900px;
+  width: 600px;
+  max-width: 600px;
   box-sizing: border-box;
   overflow-x: auto; /* Horizontal scroll ha szükséges */
 }
@@ -155,7 +158,6 @@ button:hover {
   color: #ff8800;
   text-align: center;
   margin-bottom: 20px;
-  font-family: 'Courier New', monospace;
   text-transform: uppercase;
   letter-spacing: 2px;
 }
@@ -270,13 +272,13 @@ button:hover {
 
 /* Map Display Styles */
 .map-container {
-  margin-top: 40px;
+  margin-top: 10px;
   padding: 20px;
   background-color: #1a1a1a;
   border-radius: 8px;
   border: 2px solid #333;
-  width: 100%;
-  max-width: 900px;
+  width: 600px;
+  max-width: 600px;
   box-sizing: border-box;
 }
 
@@ -284,15 +286,29 @@ button:hover {
   color: #ff8800;
   text-align: center;
   margin-bottom: 20px;
-  font-family: 'Courier New', monospace;
   text-transform: uppercase;
   letter-spacing: 2px;
 }
 
 /* Mobile map optimalizálás */
 @media (max-width: 768px) {
+  .app { display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow-x: hidden;
+    width: 100%;
+    touch-action: none;
+    -ms-touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+
   .map-container {
-    margin-top: 0;
+    margin-top: 10px;
     padding: 10px;
     border-radius: 0;
     border-left: none;
@@ -327,7 +343,6 @@ button:hover {
     right: 50%;
     margin-left: -50vw;
     margin-right: -50vw;
-    background-color: #f8f9fa;
   }
   
   .last-updated,
