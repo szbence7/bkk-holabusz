@@ -6,6 +6,21 @@
   background-color: white;
   color: black;
   min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* Mobile optimalizálás */
+@media (max-width: 768px) {
+  body {
+    margin: 0;
+    padding: 0;
+  }
+  
+  .app {
+    max-width: 100%;
+    padding: 0;
+    margin: 0;
+  }
 }
 
 h1 {
@@ -102,6 +117,38 @@ button:hover {
   background-color: #1a1a1a;
   border-radius: 8px;
   border: 2px solid #333;
+  width: 100%;
+  max-width: 900px;
+  box-sizing: border-box;
+  overflow-x: auto; /* Horizontal scroll ha szükséges */
+}
+
+/* Mobile optimalizálás dotmatrix-hez */
+@media (max-width: 768px) {
+  .dotmatrix-container {
+    padding: 10px;
+    margin: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    width: 100vw;
+    max-width: none;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+  }
+  
+  .dotmatrix-container h1 {
+    font-size: 18px !important;
+    margin-bottom: 8px;
+  }
+  
+  .dotmatrix-container .subtitle {
+    font-size: 14px !important;
+    margin-bottom: 15px;
+  }
 }
 
 .dotmatrix-container h2 {
@@ -134,6 +181,7 @@ button:hover {
   background-color: #000;
   padding: 5px;
   border-radius: 2px;
+  width: 100%; /* Teljes szélességű, nincs min-width */
 }
 
 .dotmatrix-pixel {
@@ -142,9 +190,63 @@ button:hover {
   border-radius: 0.5px;
 }
 
+/* Mobile dotmatrix optimalizálás */
+@media (max-width: 768px) {
+  .dotmatrix-display {
+    padding: 8px;
+    overflow-x: visible; /* Nincs scroll, minden elféren */
+  }
+  
+  .dotmatrix-grid {
+    gap: 0.2px;
+    padding: 2px;
+  }
+  
+  .dotmatrix-pixel {
+    width: 1.5px;
+    height: 1.5px;
+    border-radius: 0.2px;
+  }
+  
+  .dotmatrix-line {
+    margin-bottom: 6px;
+  }
+}
+
+/* Extra kis képernyőkre (kis telefonok) */
+@media (max-width: 480px) {
+  .dotmatrix-pixel {
+    width: 1.2px;
+    height: 1.2px;
+    border-radius: 0.1px;
+  }
+  
+  .dotmatrix-grid {
+    gap: 0.1px;
+    padding: 1px;
+  }
+  
+  .dotmatrix-line {
+    margin-bottom: 4px;
+  }
+}
+
 .dotmatrix-pixel.lit {
   background-color: #ff8800;
   box-shadow: 0 0 2px #ff8800;
+}
+
+/* Mobile glow hatás csökkentése */
+@media (max-width: 768px) {
+  .dotmatrix-pixel.lit {
+    box-shadow: 0 0 1px #ff8800;
+  }
+}
+
+@media (max-width: 480px) {
+  .dotmatrix-pixel.lit {
+    box-shadow: 0 0 0.5px #ff8800;
+  }
 }
 
 .dotmatrix-pixel.unlit {
@@ -168,6 +270,7 @@ button:hover {
 
 /* Map Display Styles */
 .map-container {
+  margin-top: 40px;
   padding: 20px;
   background-color: #1a1a1a;
   border-radius: 8px;
@@ -184,4 +287,51 @@ button:hover {
   font-family: 'Courier New', monospace;
   text-transform: uppercase;
   letter-spacing: 2px;
+}
+
+/* Mobile map optimalizálás */
+@media (max-width: 768px) {
+  .map-container {
+    margin-top: 0;
+    padding: 10px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    width: 100vw;
+    max-width: none;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+  }
+  
+  .map-container h2 {
+    font-size: 16px;
+    margin-bottom: 15px;
+    letter-spacing: 1px;
+  }
+}
+
+/* Update info mobilra */
+@media (max-width: 768px) {
+  .update-info {
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+    padding: 10px;
+    margin: 0;
+    width: 100vw;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+    background-color: #f8f9fa;
+  }
+  
+  .last-updated,
+  .countdown {
+    font-size: 12px;
+  }
 }

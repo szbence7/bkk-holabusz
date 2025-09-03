@@ -803,8 +803,9 @@ function App() {
           // Column 1: Route number (4 chars wide, left-aligned)
           const routeColumn = routeText.padEnd(4, ' ');
           
-          // Column 2: Direction (14 chars wide, left-aligned)
-          const directionColumn = direction.substring(0, 16).padEnd(16, ' ');
+          // Column 2: Direction (mobilon rövidebb, asztali gépen hosszabb)
+          const directionMaxLength = window.innerWidth <= 768 ? 12 : 16;
+          const directionColumn = direction.substring(0, directionMaxLength).padEnd(directionMaxLength, ' ');
           
           // Column 3: Time (3 chars wide, right-aligned)
           const timeColumn = timeText.padStart(3, ' ');
@@ -858,7 +859,10 @@ function App() {
         <MapContainer 
           center={[47.5, 19.05]} 
           zoom={13} 
-          style={{ height: '400px', width: '100%' }}
+          style={{ 
+            height: window.innerWidth <= 768 ? '300px' : '400px', 
+            width: '100%' 
+          }}
         >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
