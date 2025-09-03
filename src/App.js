@@ -53,7 +53,7 @@ const createBusIcon = (bearing) => {
 };
 
 const BKK_API_BASE = 'https://futar.bkk.hu/api/query/v1/ws/otp/api/where';
-const STOP_ID = 'BKK_F04797';
+const DEFAULT_STOP_ID = 'BKK_F04797';
 const API_KEY = 'ca61c2f4-982e-4460-aebd-950c15434919';
 
 // Function to get stop name from local stops.txt file
@@ -131,7 +131,7 @@ const getStopName = async (stopId) => {
         '044602': 'Solymár, temető',
         '044603': 'Solymár, temető',
         '570655': 'Solymár, temető',
-        'BKK_F04797': 'Központi pályaudvar',
+        'BKK_F04797': 'Keleti pályaudvar M',
       };
       
       stopName = stopMappings[stopId] || `Megálló ${stopId}`;
@@ -195,6 +195,11 @@ function App() {
   const [debugLogged, setDebugLogged] = useState(false);
   const [stopNames, setStopNames] = useState({});
   const [mainStopName, setMainStopName] = useState(null);
+  const [currentStopId, setCurrentStopId] = useState(DEFAULT_STOP_ID);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchContainerRef = useRef(null);
 
   const fetchDepartures = async () => {
     try {
@@ -204,7 +209,7 @@ function App() {
       console.log('Fetching departures...');
       
       const response = await fetch(
-        `${BKK_API_BASE}/arrivals-and-departures-for-stop.json?key=${API_KEY}&version=3&appVersion=apiary-1.0&includeReferences=routes,trips&stopId=${STOP_ID}&minutesBefore=0&minutesAfter=60`
+        `${BKK_API_BASE}/arrivals-and-departures-for-stop.json?key=${API_KEY}&version=3&appVersion=apiary-1.0&includeReferences=routes,trips&stopId=${currentStopId}&minutesBefore=0&minutesAfter=60`
       );
       
       if (!response.ok) {
@@ -282,44 +287,21 @@ function App() {
       
     } catch (err) {
       console.error('API error:', err);
-      // Fallback to mock data
-      const mockDepartures = generateMockDepartures();
-      setDepartures(mockDepartures);
-      setLastUpdated(new Date());
-      setError('API hiba - demo adatok használata');
+      setError('Hiba az API lekérdezésben');
+      setDepartures([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const generateMockDepartures = () => {
-    const routes = ['9', '15', '105', '115', '133E', '200E'];
-    const departures = [];
-    
-    for (let i = 0; i < 8; i++) {
-      const route = routes[Math.floor(Math.random() * routes.length)];
-      const minutes = Math.floor(Math.random() * 30) + 1;
-      
-      departures.push({
-        routeId: route,
-        headsign: 'Központi pályaudvar',
-        minutesUntil: minutes
-      });
-    }
-    
-    return departures.sort((a, b) => a.minutesUntil - b.minutesUntil);
-  };
-
   const loadMainStopName = async () => {
-    if (!mainStopName) {
-      try {
-        const stopName = await getStopName(STOP_ID);
-        setMainStopName(stopName);
-        console.log('Main stop name loaded:', stopName);
-      } catch (error) {
-        console.error('Error loading main stop name:', error);
-        setMainStopName(`Megálló ${STOP_ID.replace('BKK_', '')}`);
-      }
+    try {
+      const stopName = await getStopName(currentStopId);
+      setMainStopName(stopName);
+      console.log('Main stop name loaded:', stopName);
+    } catch (error) {
+      console.error('Error loading main stop name:', error);
+      setMainStopName(`Megálló ${currentStopId.replace('BKK_', '')}`);
     }
   };
 
@@ -456,26 +438,7 @@ function App() {
       
     } catch (err) {
       console.error('Vehicle positions error:', err);
-      // Fallback to mock data for demonstration
-      const mockVehicles = [
-        {
-          id: 'mock-1',
-          routeId: '164B',
-          tripId: 'mock-trip-1',
-          lat: 47.5350,
-          lng: 19.0260,
-          bearing: 45
-        },
-        {
-          id: 'mock-2', 
-          routeId: '64B',
-          tripId: 'mock-trip-2',
-          lat: 47.5330,
-          lng: 19.0250,
-          bearing: 180
-        }
-      ];
-      setVehiclePositions(mockVehicles);
+      setVehiclePositions([]);
     }
   };
 
@@ -499,7 +462,7 @@ function App() {
       clearInterval(fetchInterval);
       clearInterval(countdownInterval);
     };
-  }, []);
+  }, [currentStopId]); // Re-run when stop ID changes
 
   // Load stop names when vehicle positions change
   useEffect(() => {
@@ -507,6 +470,106 @@ function App() {
       loadStopNames(vehiclePositions);
     }
   }, [vehiclePositions]);
+
+  // Search functionality
+  const searchStops = async (query) => {
+    if (query.length < 3) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    try {
+      // Initialize stops data if not loaded yet
+      if (!window.stopsData) {
+        const response = await fetch('/stops.txt');
+        const text = await response.text();
+        const lines = text.split('\n');
+        
+        // Parse CSV data properly handling quoted strings
+        window.stopsData = {};
+        for (let i = 1; i < lines.length; i++) { // Skip header
+          const line = lines[i].trim();
+          if (line) {
+            // Parse CSV line properly handling quoted fields
+            const parts = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let j = 0; j < line.length; j++) {
+              const char = line[j];
+              
+              if (char === '"') {
+                inQuotes = !inQuotes;
+              } else if (char === ',' && !inQuotes) {
+                parts.push(current);
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+            parts.push(current); // Add the last part
+            
+            if (parts.length >= 2) {
+              const stopIdFromFile = parts[0].replace(/"/g, ''); // Remove quotes
+              const stopName = parts[1].replace(/"/g, ''); // Remove quotes
+              window.stopsData[stopIdFromFile] = stopName;
+            }
+          }
+        }
+      }
+
+      // Search through stops
+      const results = [];
+      const queryLower = query.toLowerCase();
+      
+      for (const [stopId, stopName] of Object.entries(window.stopsData)) {
+        if (stopName.toLowerCase().includes(queryLower)) {
+          results.push({
+            stopId: `BKK_${stopId}`,
+            stopName: stopName
+          });
+          
+          if (results.length >= 10) break; // Limit results
+        }
+      }
+      
+      setSearchResults(results);
+      setShowSearchResults(true);
+    } catch (error) {
+      console.error('Error searching stops:', error);
+      setSearchResults([]);
+      setShowSearchResults(false);
+    }
+  };
+
+  const handleSearchInput = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    searchStops(query);
+  };
+
+  const selectStop = (stopId, stopName) => {
+    setCurrentStopId(stopId);
+    setMainStopName(stopName);
+    setSearchQuery('');
+    setShowSearchResults(false);
+    setSearchResults([]);
+  };
+
+  // Handle click outside search container
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
+        setShowSearchResults(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Dotmatrix font definitions (5x7 pixel matrix)
   const dotMatrixFont = {
@@ -1059,9 +1122,39 @@ function App() {
 
   return (
     <div className="app">
+      {/* Search Input */}
+      <div className="search-container" ref={searchContainerRef}>
+        <input
+          type="text"
+          className="search-input"
+          placeholder="Keresés megállók között... (min. 3 karakter)"
+          value={searchQuery}
+          onChange={handleSearchInput}
+          onFocus={() => {
+            if (searchResults.length > 0) {
+              setShowSearchResults(true);
+            }
+          }}
+        />
+        {showSearchResults && searchResults.length > 0 && (
+          <div className="search-results">
+            {searchResults.map((result, index) => (
+              <div
+                key={result.stopId}
+                className="search-result-item"
+                onClick={() => selectStop(result.stopId, result.stopName)}
+              >
+                <span className="stop-name">{result.stopName}</span>
+                <span className="stop-id">{result.stopId}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Dotmatrix Display */}
       <div className="dotmatrix-container">
-        <h1 style={{color: 'white'}}>{mainStopName || STOP_ID.replace('BKK_', '')}</h1>
+        <h1 style={{color: 'white'}}>{mainStopName || currentStopId.replace('BKK_', '')}</h1>
         {renderDotMatrixDisplay()}
       </div>
       
