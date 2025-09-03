@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import React, { useState, useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import './App.css';
 
@@ -26,6 +26,32 @@ const busIcon = new L.Icon({
 const BKK_API_BASE = 'https://futar.bkk.hu/api/query/v1/ws/otp/api/where';
 const STOP_ID = 'BKK_F04797';
 const API_KEY = 'ca61c2f4-982e-4460-aebd-950c15434919';
+
+// Komponens a térkép automatikus zoom-olásához (csak egyszer, betöltéskor)
+function AutoFitBounds({ vehicles }) {
+  const map = useMap();
+  const [hasAutoFitted, setHasAutoFitted] = useState(false);
+  
+  useEffect(() => {
+    if (vehicles.length > 0 && !hasAutoFitted) {
+      const bounds = L.latLngBounds(vehicles.map(v => [v.lat, v.lng]));
+      
+      // Kis padding a szélekhez
+      const paddedBounds = bounds.pad(0.1);
+      
+      // Csak akkor fit-eljük, ha van legalább egy jármű ÉS még nem csináltuk meg
+      map.fitBounds(paddedBounds, {
+        maxZoom: 15, // Maximum zoom szint
+        animate: true,
+        duration: 1
+      });
+      
+      setHasAutoFitted(true); // Jelöljük, hogy már megtörtént az auto-fit
+    }
+  }, [vehicles, map, hasAutoFitted]);
+  
+  return null; // Ez egy invisible komponens
+}
 
 function App() {
   const [departures, setDepartures] = useState([]);
@@ -838,6 +864,20 @@ function App() {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
+          
+          {/* Automatikus zoom a járművekre */}
+          <AutoFitBounds vehicles={(() => {
+            const smartFilteredVehicles = vehiclePositions.filter(vehicle => {
+              const vehicleTripId = vehicle.tripId?.replace('BKK_', '') || '';
+              const tripIdMatch = departures.some(dep => {
+                const depTripId = dep.tripId?.replace('BKK_', '') || '';
+                return depTripId === vehicleTripId;
+              });
+              const routeIdMatch = departures.some(dep => dep.routeId === vehicle.routeId);
+              return tripIdMatch || routeIdMatch;
+            });
+            return smartFilteredVehicles;
+          })()} />
           
           {/* Busz markerek - csak azok, amik a kijelzőn is láthatók */}
           {(() => {

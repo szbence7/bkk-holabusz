@@ -98,7 +98,6 @@ button:hover {
 
 /* Dotmatrix Display Styles */
 .dotmatrix-container {
-  margin-top: 40px;
   padding: 20px;
   background-color: #1a1a1a;
   border-radius: 8px;
@@ -169,7 +168,6 @@ button:hover {
 
 /* Map Display Styles */
 .map-container {
-  margin-top: 40px;
   padding: 20px;
   background-color: #1a1a1a;
   border-radius: 8px;
