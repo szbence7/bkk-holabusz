@@ -11,21 +11,76 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Custom bus icon
-const busIcon = new L.Icon({
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-  className: 'bus-marker'
-});
+// Custom BKV bus icon with rotation
+const createBusIcon = (bearing) => {
+  return new L.DivIcon({
+    html: `
+      <div style="
+        position: relative;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">
+        <img 
+          src="/BKV_busz_symbol.svg.png" 
+          alt="Bus" 
+          style="
+            width: 20px;
+            height: 20px;
+          "
+        />
+        <div style="
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(${bearing || 0}deg) translateY(-12px);
+          width: 0;
+          height: 0;
+          border-left: 3px solid transparent;
+          border-right: 3px solid transparent;
+          border-bottom: 6px solid #ff4444;
+          pointer-events: none;
+        "></div>
+      </div>
+    `,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+    popupAnchor: [0, -10],
+    className: 'bkv-bus-marker'
+  });
+};
 
 const BKK_API_BASE = 'https://futar.bkk.hu/api/query/v1/ws/otp/api/where';
 const STOP_ID = 'BKK_F04797';
 const API_KEY = 'ca61c2f4-982e-4460-aebd-950c15434919';
+
+// Function to get stop name from stop ID
+const getStopName = (stopId) => {
+  // Known stop mappings - you can expand this
+  const stopMappings = {
+    '044603': 'Solymár, temető',
+    '570655': 'Solymár, temető',
+    'BKK_F04797': 'Központi pályaudvar',
+    // Add more mappings as needed
+  };
+  
+  return stopMappings[stopId] || `Megálló ${stopId}`;
+};
+
+// Function to translate current status
+const translateStatus = (status) => {
+  const statusTranslations = {
+    'IN_TRANSIT_TO': 'Útban a megállóhoz',
+    'INCOMING_AT': 'Közeledik a megállóhoz',
+    'STOPPED_AT': 'Megállónál',
+    'SCHEDULED': 'Ütemezett',
+    'UNSCHEDULED': 'Nem ütemezett'
+  };
+  
+  return statusTranslations[status] || status;
+};
 
 // Komponens a térkép automatikus zoom-olásához (csak egyszer, betöltéskor)
 function AutoFitBounds({ vehicles }) {
@@ -234,6 +289,37 @@ function App() {
           if (bearingMatch) {
             vehicle.bearing = parseFloat(bearingMatch[1]);
           }
+        }
+        
+        // Extract additional vehicle information
+        const stopIdMatch = entity.match(/stop_id:\s*"([^"]+)"/);
+        if (stopIdMatch) {
+          vehicle.stopId = stopIdMatch[1];
+        }
+        
+        const currentStatusMatch = entity.match(/current_status:\s*(\w+)/);
+        if (currentStatusMatch) {
+          vehicle.currentStatus = currentStatusMatch[1];
+        }
+        
+        const licensePlateMatch = entity.match(/license_plate:\s*"([^"]+)"/);
+        if (licensePlateMatch) {
+          vehicle.licensePlate = licensePlateMatch[1];
+        }
+        
+        const vehicleModelMatch = entity.match(/vehicle_model:\s*"([^"]+)"/);
+        if (vehicleModelMatch) {
+          vehicle.vehicleModel = vehicleModelMatch[1];
+        }
+        
+        const doorOpenMatch = entity.match(/door_open:\s*(true|false)/);
+        if (doorOpenMatch) {
+          vehicle.doorOpen = doorOpenMatch[1] === 'true';
+        }
+        
+        const vehicleLabelMatch = entity.match(/label:\s*"([^"]+)"/);
+        if (vehicleLabelMatch) {
+          vehicle.label = vehicleLabelMatch[1];
         }
         
         // Only add vehicles with required data
@@ -935,19 +1021,28 @@ function App() {
             <Marker 
               key={vehicle.id} 
               position={[vehicle.lat, vehicle.lng]}
-              icon={busIcon}
+              icon={createBusIcon(vehicle.bearing)}
             >
               <Popup>
-                <strong>🚌 Járat: {(() => {
-                  // Megkeressük a megfelelő departure-t a tripId alapján, hogy megkapjuk a helyes routeId-t
-                  const matchingDeparture = departures.find(dep => 
-                    dep.tripId?.replace('BKK_', '') === vehicle.tripId?.replace('BKK_', '')
-                  );
-                  return matchingDeparture ? matchingDeparture.routeId : vehicle.routeId;
-                })()}</strong><br/>
-                Jármű ID: {vehicle.id}<br/>
-                Trip ID: {vehicle.tripId}<br/>
-                {vehicle.bearing && `Irány: ${vehicle.bearing}°`}
+                <div>
+                  <div>
+                    <img src="/BKV_busz_symbol.svg.png" alt="Bus" style={{height: '16px', width: '16px', verticalAlign: 'middle', marginRight: '4px'}} />
+                    <strong>Járat:</strong> {(() => {
+                      // Megkeressük a megfelelő departure-t a tripId alapján, hogy megkapjuk a helyes routeId-t
+                      const matchingDeparture = departures.find(dep => 
+                        dep.tripId?.replace('BKK_', '') === vehicle.tripId?.replace('BKK_', '')
+                      );
+                      return matchingDeparture ? matchingDeparture.routeId : vehicle.routeId;
+                    })()}
+                  </div>
+                  {vehicle.label && <div><strong>Célállomás:</strong> {vehicle.label}</div>}
+                  {vehicle.stopId && <div><strong>Következő megálló:</strong> {getStopName(vehicle.stopId)}</div>}
+                  {vehicle.currentStatus && <div><strong>Státusz:</strong> {translateStatus(vehicle.currentStatus)}</div>}
+                  {vehicle.licensePlate && <div><strong>Rendszám:</strong> {vehicle.licensePlate}</div>}
+                  {vehicle.vehicleModel && <div><strong>Típus:</strong> {vehicle.vehicleModel}</div>}
+                  {vehicle.doorOpen !== undefined && <div><strong>Ajtók:</strong> {vehicle.doorOpen ? 'Nyitva' : 'Zárva'}</div>}
+                  {vehicle.bearing && <div><strong>Irány:</strong> {Math.round(vehicle.bearing)}°</div>}
+                </div>
               </Popup>
             </Marker>
           ))}
