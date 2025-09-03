@@ -152,3 +152,17 @@ button:hover {
   background-color: #000;
   border: 0.5px solid #111;
 }
+
+/* Blinking animation for arriving buses */
+.dotmatrix-grid.blinking {
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}

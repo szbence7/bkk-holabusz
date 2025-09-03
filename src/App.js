@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 
 const BKK_API_BASE = 'https://futar.bkk.hu/api/query/v1/ws/otp/api/where';
-const STOP_ID = 'BKK_F04798';
+const STOP_ID = 'BKK_F04797';
 
 function App() {
   const [departures, setDepartures] = useState([]);
@@ -663,7 +663,7 @@ function App() {
           // Three column layout: ROUTE | DIRECTION | TIME
           const routeText = departure.routeId;
           const direction = departure.headsign || 'Kozpont';
-          const timeText = departure.minutesUntil <= 0 ? "'" : `${departure.minutesUntil}'`;
+          const timeText = departure.minutesUntil <= 0 ? "0'" : `${departure.minutesUntil}'`;
           
           // Column 1: Route number (4 chars wide, left-aligned)
           const routeColumn = routeText.padEnd(4, ' ');
@@ -680,10 +680,13 @@ function App() {
           const matrix = createDotMatrixText(text);
           const gridColumns = matrix[0].length;
           
+          // Check if this bus is arriving now (0 minutes)
+          const isArriving = departure.minutesUntil <= 0;
+          
           return (
             <div key={index} className="dotmatrix-line">
               <div 
-                className="dotmatrix-grid"
+                className={`dotmatrix-grid ${isArriving ? 'blinking' : ''}`}
                 style={{
                   gridTemplateColumns: `repeat(${gridColumns}, 3px)`,
                   gridTemplateRows: 'repeat(7, 3px)'
