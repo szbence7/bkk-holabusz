@@ -166,3 +166,24 @@ button:hover {
     opacity: 0;
   }
 }
+
+/* Map Display Styles */
+.map-container {
+  margin-top: 40px;
+  padding: 20px;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 2px solid #333;
+  width: 100%;
+  max-width: 900px;
+  box-sizing: border-box;
+}
+
+.map-container h2 {
+  color: #ff8800;
+  text-align: center;
+  margin-bottom: 20px;
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}

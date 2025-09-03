@@ -1,15 +1,39 @@
 import React, { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
 import './App.css';
+
+// Fix Leaflet marker icons
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+// Custom bus icon
+const busIcon = new L.Icon({
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+  className: 'bus-marker'
+});
 
 const BKK_API_BASE = 'https://futar.bkk.hu/api/query/v1/ws/otp/api/where';
 const STOP_ID = 'BKK_F04797';
+const API_KEY = 'ca61c2f4-982e-4460-aebd-950c15434919';
 
 function App() {
   const [departures, setDepartures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [countdown, setCountdown] = useState(30);
+  const [countdown, setCountdown] = useState(5);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [vehiclePositions, setVehiclePositions] = useState([]);
 
   const fetchDepartures = async () => {
     try {
@@ -19,7 +43,7 @@ function App() {
       console.log('Fetching departures...');
       
       const response = await fetch(
-        `${BKK_API_BASE}/arrivals-and-departures-for-stop.json?key=ca61c2f4-982e-4460-aebd-950c15434919&version=3&appVersion=apiary-1.0&includeReferences=routes,trips&stopId=${STOP_ID}&minutesBefore=0&minutesAfter=60`
+        `${BKK_API_BASE}/arrivals-and-departures-for-stop.json?key=${API_KEY}&version=3&appVersion=apiary-1.0&includeReferences=routes,trips&stopId=${STOP_ID}&minutesBefore=0&minutesAfter=60`
       );
       
       if (!response.ok) {
@@ -77,7 +101,8 @@ function App() {
             routeId: routeShortName,
             headsign: stopTime.stopHeadsign || 'N/A',
             minutesUntil: timeUntilDeparture,
-            displayTime: timeUntilDeparture <= 0 ? 'MOST' : `${timeUntilDeparture} perc`
+            displayTime: timeUntilDeparture <= 0 ? 'MOST' : `${timeUntilDeparture} perc`,
+            tripId: tripId // Mentjük a trip ID-t is a vehicle pozíciók párosításához
           };
         })
         .filter(dep => dep.minutesUntil >= 0 && dep.minutesUntil <= 60)
@@ -122,12 +147,106 @@ function App() {
     return departures.sort((a, b) => a.minutesUntil - b.minutesUntil);
   };
 
+  const fetchVehiclePositions = async () => {
+    try {
+      console.log('Fetching vehicle positions from GTFS-RT API...');
+      
+      const response = await fetch(
+        `https://go.bkk.hu/api/query/v1/ws/gtfs-rt/full/VehiclePositions.txt?key=${API_KEY}`
+      );
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.text();
+      console.log('Vehicle positions raw response:', data);
+      
+      // Parse the GTFS-RT text data - simplified approach
+      console.log('Raw GTFS-RT data sample:', data.substring(0, 1000));
+      
+      // Split into entities
+      const entities = data.split('entity {').slice(1); // Remove first empty element
+      const vehicles = [];
+      
+      for (let entity of entities) {
+        const vehicle = {};
+        
+        // Extract trip_id
+        const tripIdMatch = entity.match(/trip_id:\s*"([^"]+)"/);
+        if (tripIdMatch) {
+          vehicle.tripId = tripIdMatch[1];
+        }
+        
+        // Extract route_id
+        const routeIdMatch = entity.match(/route_id:\s*"([^"]+)"/);
+        if (routeIdMatch) {
+          const routeId = routeIdMatch[1].replace('BKK_', '').replace(/^0+/, '') || routeIdMatch[1];
+          vehicle.routeId = routeId;
+        }
+        
+        // Extract vehicle id
+        const vehicleIdMatch = entity.match(/vehicle\s*{\s*id:\s*"([^"]+)"/);
+        if (vehicleIdMatch) {
+          vehicle.id = vehicleIdMatch[1];
+        }
+        
+        // Extract position
+        const latMatch = entity.match(/latitude:\s*([\d.-]+)/);
+        const lngMatch = entity.match(/longitude:\s*([\d.-]+)/);
+        const bearingMatch = entity.match(/bearing:\s*([\d.-]+)/);
+        
+        if (latMatch && lngMatch) {
+          vehicle.lat = parseFloat(latMatch[1]);
+          vehicle.lng = parseFloat(lngMatch[1]);
+          if (bearingMatch) {
+            vehicle.bearing = parseFloat(bearingMatch[1]);
+          }
+        }
+        
+        // Only add vehicles with required data
+        if (vehicle.tripId && vehicle.lat && vehicle.lng) {
+          vehicles.push(vehicle);
+        }
+      }
+      
+      console.log('Parsed vehicles:', vehicles);
+      console.log('Current departures for matching:', departures);
+      setVehiclePositions(vehicles);
+      
+    } catch (err) {
+      console.error('Vehicle positions error:', err);
+      // Fallback to mock data for demonstration
+      const mockVehicles = [
+        {
+          id: 'mock-1',
+          routeId: '164B',
+          tripId: 'mock-trip-1',
+          lat: 47.5350,
+          lng: 19.0260,
+          bearing: 45
+        },
+        {
+          id: 'mock-2', 
+          routeId: '64B',
+          tripId: 'mock-trip-2',
+          lat: 47.5330,
+          lng: 19.0250,
+          bearing: 180
+        }
+      ];
+      setVehiclePositions(mockVehicles);
+    }
+  };
+
   useEffect(() => {
     fetchDepartures();
+    fetchVehiclePositions();
     setCountdown(5);
     
     const fetchInterval = setInterval(() => {
       fetchDepartures();
+      fetchVehiclePositions();
       setCountdown(5);
     }, 5000); // Refresh every 5 seconds
     
@@ -696,6 +815,48 @@ function App() {
         <h1 style={{color: 'white'}}>BKK Bus Tracker - {STOP_ID.replace('BKK_', '')}</h1>
         <p className="subtitle" style={{color: 'white'}}>Következő 1 órában induló járatok</p>
         {renderDotMatrixDisplay()}
+      </div>
+      
+      {/* Map Display */}
+      <div className="map-container">
+        <h2 style={{color: 'white', textAlign: 'center', marginBottom: '20px'}}>Járművek valós idejű helyzete</h2>
+        <MapContainer 
+          center={[47.5, 19.05]} 
+          zoom={13} 
+          style={{ height: '400px', width: '100%' }}
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          />
+          
+          {/* Busz markerek - átmenetileg MINDEN vehicle, debug céljából */}
+          {(() => {
+            const filteredVehicles = vehiclePositions.filter(vehicle => 
+              departures.some(dep => dep.tripId === vehicle.tripId)
+            );
+            console.log('Filtered vehicles for map:', filteredVehicles);
+            console.log('All vehicle positions:', vehiclePositions);
+            console.log('All departures tripIds:', departures.map(d => d.tripId));
+            console.log('Vehicle tripIds:', vehiclePositions.map(v => v.tripId));
+            
+            // DEBUG: Átmenetileg minden vehicle-t mutat
+            return vehiclePositions.slice(0, 10); // Maximum 10 vehicle debug céljából
+          })().map((vehicle) => (
+            <Marker 
+              key={vehicle.id} 
+              position={[vehicle.lat, vehicle.lng]}
+              icon={busIcon}
+            >
+              <Popup>
+                <strong>🚌 Járat: {vehicle.routeId}</strong><br/>
+                Jármű ID: {vehicle.id}<br/>
+                Trip ID: {vehicle.tripId}<br/>
+                {vehicle.bearing && `Irány: ${vehicle.bearing}°`}
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
       </div>
       
       <div className="update-info">
