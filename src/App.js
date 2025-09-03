@@ -34,6 +34,7 @@ function App() {
   const [countdown, setCountdown] = useState(5);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [vehiclePositions, setVehiclePositions] = useState([]);
+  const [debugLogged, setDebugLogged] = useState(false);
 
   const fetchDepartures = async () => {
     try {
@@ -75,8 +76,10 @@ function App() {
           if (route?.shortName) {
             routeShortName = route.shortName;
           } else if (routeId) {
-            // Remove BKK_ prefix and try to get just the number
-            routeShortName = routeId.replace('BKK_', '').replace(/^0+/, '') || routeId.replace('BKK_', '');
+            // Remove BKK_ prefix and csak a leading nullákat távolítjuk el
+            let cleanRouteId = routeId.replace('BKK_', '');
+            cleanRouteId = cleanRouteId.replace(/^0+(\d)/, '$1'); // 0164B -> 164B
+            routeShortName = cleanRouteId || routeId.replace('BKK_', '');
           } else if (tripId) {
             // Try to extract from tripId as last resort
             const tripMatch = tripId.match(/\d+/);
@@ -178,11 +181,14 @@ function App() {
           vehicle.tripId = tripIdMatch[1];
         }
         
-        // Extract route_id
+        // Extract route_id (raw formában is eltároljuk)
         const routeIdMatch = entity.match(/route_id:\s*"([^"]+)"/);
         if (routeIdMatch) {
-          const routeId = routeIdMatch[1].replace('BKK_', '').replace(/^0+/, '') || routeIdMatch[1];
-          vehicle.routeId = routeId;
+          vehicle.rawRouteId = routeIdMatch[1]; // Eredeti formátum megtartása
+          let routeId = routeIdMatch[1].replace('BKK_', '');
+          // Csak a leading nullákat távolítjuk el, de a betűket megtartjuk
+          routeId = routeId.replace(/^0+(\d)/, '$1'); // 0164B -> 164B
+          vehicle.routeId = routeId || routeIdMatch[1];
         }
         
         // Extract vehicle id
@@ -210,8 +216,11 @@ function App() {
         }
       }
       
-      console.log('Parsed vehicles:', vehicles);
-      console.log('Current departures for matching:', departures);
+      if (!debugLogged) {
+        console.log('Parsed vehicles:', vehicles);
+        console.log('Current departures for matching:', departures);
+        setDebugLogged(true);
+      }
       setVehiclePositions(vehicles);
       
     } catch (err) {
@@ -830,18 +839,55 @@ function App() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
           
-          {/* Busz markerek - átmenetileg MINDEN vehicle, debug céljából */}
+          {/* Busz markerek - csak azok, amik a kijelzőn is láthatók */}
           {(() => {
             const filteredVehicles = vehiclePositions.filter(vehicle => 
               departures.some(dep => dep.tripId === vehicle.tripId)
             );
-            console.log('Filtered vehicles for map:', filteredVehicles);
-            console.log('All vehicle positions:', vehiclePositions);
-            console.log('All departures tripIds:', departures.map(d => d.tripId));
-            console.log('Vehicle tripIds:', vehiclePositions.map(v => v.tripId));
             
-            // DEBUG: Átmenetileg minden vehicle-t mutat
-            return vehiclePositions.slice(0, 10); // Maximum 10 vehicle debug céljából
+            // Intelligens párosítás - BKK_ prefix nélkül
+            const smartFilteredVehicles = vehiclePositions.filter(vehicle => {
+              // Normalizáljuk a tripId-ket (BKK_ prefix eltávolítása)
+              const vehicleTripId = vehicle.tripId?.replace('BKK_', '') || '';
+              
+              const tripIdMatch = departures.some(dep => {
+                const depTripId = dep.tripId?.replace('BKK_', '') || '';
+                return depTripId === vehicleTripId;
+              });
+              
+              // Ha nincs tripId egyezés, próbáljuk routeId alapján
+              const routeIdMatch = departures.some(dep => dep.routeId === vehicle.routeId);
+              
+              return tripIdMatch || routeIdMatch;
+            });
+            
+            // Debug log csak egyszer
+            if (!debugLogged && vehiclePositions.length > 0 && departures.length > 0) {
+              console.log('=== DETAILED TRIP ID MATCHING DEBUG ===');
+              console.log('Departures tripIds (raw):', departures.map(d => d.tripId));
+              console.log('Vehicle tripIds (raw):', vehiclePositions.map(v => v.tripId));
+              
+              console.log('Departures tripIds (normalized):', departures.map(d => d.tripId?.replace('BKK_', '')));
+              console.log('Vehicle tripIds (normalized):', vehiclePositions.map(v => v.tripId?.replace('BKK_', '')));
+              
+              // Részletes párosítás teszt
+              vehiclePositions.slice(0, 3).forEach(vehicle => {
+                const vehicleTripId = vehicle.tripId?.replace('BKK_', '') || '';
+                console.log(`Vehicle ${vehicle.id} tripId: "${vehicleTripId}"`);
+                
+                const matches = departures.filter(dep => {
+                  const depTripId = dep.tripId?.replace('BKK_', '') || '';
+                  return depTripId === vehicleTripId;
+                });
+                
+                console.log(`  Matches:`, matches.length > 0 ? matches.map(m => m.routeId) : 'NONE');
+              });
+              
+              console.log('Smart filtered vehicles:', smartFilteredVehicles);
+              console.log('=========================================');
+            }
+            
+            return smartFilteredVehicles;
           })().map((vehicle) => (
             <Marker 
               key={vehicle.id} 
@@ -849,7 +895,13 @@ function App() {
               icon={busIcon}
             >
               <Popup>
-                <strong>🚌 Járat: {vehicle.routeId}</strong><br/>
+                <strong>🚌 Járat: {(() => {
+                  // Megkeressük a megfelelő departure-t a tripId alapján, hogy megkapjuk a helyes routeId-t
+                  const matchingDeparture = departures.find(dep => 
+                    dep.tripId?.replace('BKK_', '') === vehicle.tripId?.replace('BKK_', '')
+                  );
+                  return matchingDeparture ? matchingDeparture.routeId : vehicle.routeId;
+                })()}</strong><br/>
                 Jármű ID: {vehicle.id}<br/>
                 Trip ID: {vehicle.tripId}<br/>
                 {vehicle.bearing && `Irány: ${vehicle.bearing}°`}
