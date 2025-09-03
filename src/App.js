@@ -124,15 +124,15 @@ function App() {
 
   useEffect(() => {
     fetchDepartures();
-    setCountdown(30);
+    setCountdown(5);
     
     const fetchInterval = setInterval(() => {
       fetchDepartures();
-      setCountdown(30);
-    }, 30000); // Refresh every 30 seconds
+      setCountdown(5);
+    }, 5000); // Refresh every 5 seconds
     
     const countdownInterval = setInterval(() => {
-      setCountdown(prev => prev > 0 ? prev - 1 : 30);
+      setCountdown(prev => prev > 0 ? prev - 1 : 5);
     }, 1000); // Update countdown every second
     
     return () => {
