@@ -95,3 +95,60 @@ button:hover {
   font-size: 14px;
   font-weight: bold;
 }
+
+/* Dotmatrix Display Styles */
+.dotmatrix-container {
+  margin-top: 40px;
+  padding: 20px;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 2px solid #333;
+}
+
+.dotmatrix-container h2 {
+  color: #ff8800;
+  text-align: center;
+  margin-bottom: 20px;
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.dotmatrix-display {
+  background-color: #000;
+  padding: 15px;
+  border-radius: 4px;
+  border: 1px solid #333;
+}
+
+.dotmatrix-line {
+  margin-bottom: 10px;
+}
+
+.dotmatrix-line:last-child {
+  margin-bottom: 0;
+}
+
+.dotmatrix-grid {
+  display: grid;
+  gap: 0.5px;
+  background-color: #000;
+  padding: 5px;
+  border-radius: 2px;
+}
+
+.dotmatrix-pixel {
+  width: 3px;
+  height: 3px;
+  border-radius: 0.5px;
+}
+
+.dotmatrix-pixel.lit {
+  background-color: #ff8800;
+  box-shadow: 0 0 2px #ff8800;
+}
+
+.dotmatrix-pixel.unlit {
+  background-color: #000;
+  border: 0.5px solid #111;
+}
