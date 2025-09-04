@@ -52,22 +52,43 @@ const createBusIcon = (bearing) => {
   });
 };
 
-// Custom stop icon - white circle with BKV blue border
-const createStopIcon = () => {
+// Custom stop icon - white circle with BKV blue border and direction triangle
+const createStopIcon = (direction) => {
   return new L.DivIcon({
     html: `
       <div style="
-        width: 16px;
-        height: 16px;
-        background-color: white;
-        border: 3px solid #1e88e5;
-        border-radius: 50%;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      "></div>
+        position: relative;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">
+        <div style="
+          width: 16px;
+          height: 16px;
+          background-color: white;
+          border: 3px solid #1e88e5;
+          border-radius: 50%;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        "></div>
+        <div style="
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(${direction || 0}deg) translateY(-12px);
+          width: 0;
+          height: 0;
+          border-left: 3px solid transparent;
+          border-right: 3px solid transparent;
+          border-bottom: 6px solid #000000;
+          pointer-events: none;
+        "></div>
+      </div>
     `,
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
-    popupAnchor: [0, -11],
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+    popupAnchor: [0, -10],
     className: 'bkv-stop-marker'
   });
 };
@@ -224,6 +245,7 @@ function App() {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [currentStopPosition, setCurrentStopPosition] = useState(null);
   const [siblingStop, setSiblingStop] = useState(null);
+  const [stopDirections, setStopDirections] = useState({});
   const searchContainerRef = useRef(null);
 
   const fetchDepartures = async () => {
@@ -403,6 +425,57 @@ function App() {
     }
   };
 
+  const loadStopDirection = async (stopId) => {
+    try {
+      // Check if we already have the direction cached
+      if (stopDirections[stopId]) {
+        return stopDirections[stopId];
+      }
+
+      // Get stop position first
+      const position = window.stopsPositions?.[stopId.replace('BKK_', '').replace(/^D/, '')];
+      if (!position) {
+        console.log('No position found for stop direction lookup:', stopId);
+        return null;
+      }
+
+      // Fetch stop details from BKK API
+      const response = await fetch(
+        `${BKK_API_BASE}/stops-for-location.json?key=${API_KEY}&version=3&appVersion=apiary-1.0&lat=${position.lat}&lon=${position.lng}&radius=50`
+      );
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.status === 'OK' && data.data?.list) {
+        // Find the exact stop by ID
+        const stop = data.data.list.find(s => s.id === stopId);
+        if (stop && stop.direction) {
+          const direction = parseFloat(stop.direction);
+          console.log('Found stop direction:', direction, 'for stopId:', stopId);
+          
+          // Cache the direction
+          setStopDirections(prev => ({
+            ...prev,
+            [stopId]: direction
+          }));
+          
+          return direction;
+        }
+      }
+      
+      console.log('No direction found for stop:', stopId);
+      return null;
+      
+    } catch (error) {
+      console.error('Error loading stop direction:', error);
+      return null;
+    }
+  };
+
   const loadStopNames = async (vehicles) => {
     const newStopNames = { ...stopNames };
     let hasNewNames = false;
@@ -543,6 +616,7 @@ function App() {
   useEffect(() => {
     loadMainStopName(); // Load main stop name first
     loadStopPosition(currentStopId); // Load stop position
+    loadStopDirection(currentStopId); // Load stop direction
     fetchDepartures();
     fetchVehiclePositions();
     setCountdown(5);
@@ -652,6 +726,7 @@ function App() {
     setCurrentStopId(stopId);
     setMainStopName(stopName);
     loadStopPosition(stopId); // Load new stop position
+    loadStopDirection(stopId); // Load new stop direction
     setSearchQuery('');
     setShowSearchResults(false);
     setSearchResults([]);
@@ -1399,13 +1474,19 @@ function App() {
           {currentStopPosition && (
             <Marker 
               position={[currentStopPosition.lat, currentStopPosition.lng]}
-              icon={createStopIcon()}
+              icon={createStopIcon(stopDirections[currentStopId])}
             >
               <Popup>
                 <div>
                   <strong>{mainStopName || currentStopId.replace('BKK_', '')}</strong>
                   <br />
                   <small>Megálló ID: {currentStopId}</small>
+                  {stopDirections[currentStopId] && (
+                    <>
+                      <br />
+                      <small>Irány: {Math.round(stopDirections[currentStopId])}°</small>
+                    </>
+                  )}
                 </div>
               </Popup>
             </Marker>
