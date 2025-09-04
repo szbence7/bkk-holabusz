@@ -11,8 +11,41 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Custom BKV bus icon with rotation
-const createBusIcon = (bearing) => {
+// Custom vehicle icon with rotation based on vehicle type
+const createVehicleIcon = (bearing, vehicleType, isNightBus = false) => {
+  let iconSrc = '/BKV_busz_symbol.svg.png'; // Default bus icon
+  let altText = 'Bus';
+  
+  // Determine icon based on vehicle type
+  if (isNightBus) {
+    iconSrc = '/BKK_night_line_logo.svg.png';
+    altText = 'Night Bus';
+  } else {
+    switch (vehicleType) {
+      case 'TRAM':
+        iconSrc = '/Logo_tramway-budapest.svg.png';
+        altText = 'Tram';
+        break;
+      case 'TROLLEYBUS':
+        iconSrc = '/Budapest_trolleybus_symbol.svg.png';
+        altText = 'Trolleybus';
+        break;
+      case 'SUBWAY':
+        iconSrc = '/BKV_busz_symbol.svg.png'; // Metro uses bus icon for now
+        altText = 'Metro';
+        break;
+      case 'RAIL':
+        iconSrc = '/Budapest_hev_symbol.svg.png';
+        altText = 'HEV';
+        break;
+      case 'BUS':
+      default:
+        iconSrc = '/BKV_busz_symbol.svg.png';
+        altText = 'Bus';
+        break;
+    }
+  }
+  
   return new L.DivIcon({
     html: `
       <div style="
@@ -24,8 +57,8 @@ const createBusIcon = (bearing) => {
         justify-content: center;
       ">
         <img 
-          src="/BKV_busz_symbol.svg.png" 
-          alt="Bus" 
+          src="${iconSrc}" 
+          alt="${altText}" 
           style="
             width: 20px;
             height: 20px;
@@ -48,7 +81,7 @@ const createBusIcon = (bearing) => {
     iconSize: [20, 20],
     iconAnchor: [10, 10],
     popupAnchor: [0, -10],
-    className: 'bkv-bus-marker'
+    className: 'bkv-vehicle-marker'
   });
 };
 
@@ -317,7 +350,9 @@ function App() {
             headsign: stopTime.stopHeadsign || 'N/A',
             minutesUntil: timeUntilDeparture,
             displayTime: timeUntilDeparture <= 0 ? 'MOST' : `${timeUntilDeparture} perc`,
-            tripId: tripId // Mentjük a trip ID-t is a vehicle pozíciók párosításához
+            tripId: tripId, // Mentjük a trip ID-t is a vehicle pozíciók párosításához
+            vehicleType: route?.type || 'BUS', // Jármű típusa
+            isNightBus: route?.color === '000000' || route?.style?.vehicleIcon?.name === 'night-bus' || route?.style?.groupId === 6 // Éjszakai busz ellenőrzés
           };
         })
         .filter(dep => dep.minutesUntil >= 0 && dep.minutesUntil <= 60)
@@ -596,6 +631,9 @@ function App() {
         
         // Only add vehicles with required data
         if (vehicle.tripId && vehicle.lat && vehicle.lng) {
+          // Add vehicle type information - will be matched with departures later
+          vehicle.vehicleType = 'BUS'; // Default, will be updated when matched with departures
+          vehicle.isNightBus = false; // Default, will be updated when matched with departures
           vehicles.push(vehicle);
         }
       }
@@ -1541,16 +1579,66 @@ function App() {
             }
             
             return smartFilteredVehicles;
-          })().map((vehicle) => (
-            <Marker 
-              key={vehicle.id} 
-              position={[vehicle.lat, vehicle.lng]}
-              icon={createBusIcon(vehicle.bearing)}
-            >
+          })().map((vehicle) => {
+            // Find matching departure to get vehicle type
+            const matchingDeparture = departures.find(dep => 
+              dep.tripId?.replace('BKK_', '') === vehicle.tripId?.replace('BKK_', '')
+            );
+            
+            const vehicleType = matchingDeparture?.vehicleType || vehicle.vehicleType || 'BUS';
+            const isNightBus = matchingDeparture?.isNightBus || vehicle.isNightBus || false;
+            
+            return (
+              <Marker 
+                key={vehicle.id} 
+                position={[vehicle.lat, vehicle.lng]}
+                icon={createVehicleIcon(vehicle.bearing, vehicleType, isNightBus)}
+              >
               <Popup>
                 <div>
                   <div>
-                    <img src="/BKV_busz_symbol.svg.png" alt="Bus" style={{height: '16px', width: '16px', verticalAlign: 'middle', marginRight: '4px'}} />
+                    {(() => {
+                      // Get the correct icon for the popup
+                      let popupIconSrc = '/BKV_busz_symbol.svg.png';
+                      let popupAltText = 'Bus';
+                      
+                      if (isNightBus) {
+                        popupIconSrc = '/BKK_night_line_logo.svg.png';
+                        popupAltText = 'Night Bus';
+                      } else {
+                        switch (vehicleType) {
+                          case 'TRAM':
+                            popupIconSrc = '/Logo_tramway-budapest.svg.png';
+                            popupAltText = 'Tram';
+                            break;
+                          case 'TROLLEYBUS':
+                            popupIconSrc = '/Budapest_trolleybus_symbol.svg.png';
+                            popupAltText = 'Trolleybus';
+                            break;
+                          case 'SUBWAY':
+                            popupIconSrc = '/BKV_busz_symbol.svg.png';
+                            popupAltText = 'Metro';
+                            break;
+                          case 'RAIL':
+                            popupIconSrc = '/Budapest_hev_symbol.svg.png';
+                            popupAltText = 'HEV';
+                            break;
+                          case 'BUS':
+                          default:
+                            popupIconSrc = '/BKV_busz_symbol.svg.png';
+                            popupAltText = 'Bus';
+                            break;
+                        }
+                      }
+                      
+                      return (
+                        <img 
+                          src={popupIconSrc} 
+                          alt={popupAltText} 
+                          style={{height: '16px', width: '16px', verticalAlign: 'middle', marginRight: '4px'}} 
+                        />
+                      );
+                    })()}
                     <strong>Járat:</strong> {(() => {
                       // Megkeressük a megfelelő departure-t a tripId alapján, hogy megkapjuk a helyes routeId-t
                       const matchingDeparture = departures.find(dep => 
@@ -1569,7 +1657,8 @@ function App() {
                 </div>
               </Popup>
             </Marker>
-          ))}
+            );
+          })}
         </MapContainer>
       </div>
       
