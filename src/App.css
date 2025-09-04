@@ -129,8 +129,6 @@ button:hover {
 .dotmatrix-container h1 {
   margin-top: 0px;
   text-align: center;
-  margin-bottom: 20px;
-  letter-spacing: 2px;
 }
 
 /* Mobile optimalizálás dotmatrix-hez */
@@ -150,14 +148,17 @@ button:hover {
     margin-right: -50vw;
   }
   
-  .dotmatrix-container h1 {
-    font-size: 18px !important;
-    margin-bottom: 8px;
-  }
-  
   .dotmatrix-container .subtitle {
     font-size: 14px !important;
     margin-bottom: 15px;
+  }
+
+  .dotmatrix-container .dotmatrix-header {
+    height: 2em;
+  }
+
+  .dotmatrix-container .dotmatrix-header h1 {
+    font-size: 1.5em;
   }
 }
 
@@ -330,7 +331,7 @@ button:hover {
   }
   
   .map-container h2 {
-    font-size: 16px;
+    font-size: 1em;
     margin-bottom: 15px;
     letter-spacing: 1px;
   }
@@ -449,9 +450,7 @@ button:hover {
   }
   
   .search-input {
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
+
     font-size: 16px; /* Prevents zoom on iOS */
   }
   

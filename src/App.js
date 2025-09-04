@@ -1350,16 +1350,25 @@ function App() {
       {/* Dotmatrix Display */}
       <div className="dotmatrix-container">
         <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
-          <h1 style={{color: 'white'}}>{mainStopName || currentStopId.replace('BKK_', '')}</h1>
-          {siblingStop && (
-            <button 
-              onClick={switchToSiblingStop}
-              style={{background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px'}}
-              title={`Váltás a pár megállóra: ${siblingStop.name}`}
-            >
-              🔄
-            </button>
-          )}
+          <div className="dotmatrix-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '10px'}}>
+            <div style={{textAlign: 'left'}}>
+              <h1 style={{color: 'white', margin: 0}}>{mainStopName || currentStopId.replace('BKK_', '')}</h1>
+            </div>
+            {siblingStop && (
+              <div style={{textAlign: 'right'}}>
+                <button 
+                  onClick={switchToSiblingStop}
+                  title={`Váltás a pár megállóra: ${siblingStop.name}`}
+                  style={{
+                    background: 'none',
+                  }}
+                >
+                🔄
+                </button>
+              </div>
+            )}
+          </div>
+            
         </div>
         {renderDotMatrixDisplay()}
       </div>
