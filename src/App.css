@@ -278,6 +278,18 @@ button:hover {
   }
 }
 
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(30, 136, 229, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(30, 136, 229, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(30, 136, 229, 0);
+  }
+}
+
 /* Map Display Styles */
 .map-container {
   margin-top: 10px;

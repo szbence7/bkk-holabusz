@@ -85,6 +85,34 @@ const createVehicleIcon = (bearing, vehicleType, isNightBus = false) => {
   });
 };
 
+// Custom user location icon - pulsing blue dot
+const createUserLocationIcon = () => {
+  return new L.DivIcon({
+    html: `
+      <div style="
+        position: relative;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">
+        <div style="
+          width: 12px;
+          height: 12px;
+          background-color: #1e88e5;
+          border-radius: 50%;
+          box-shadow: 0 0 0 rgba(30, 136, 229, 0.4);
+          animation: pulse 2s infinite;
+        "></div>
+      </div>
+    `,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+    className: 'user-location-marker'
+  });
+};
+
 // Custom stop icon - white circle with BKV blue border and direction triangle
 const createStopIcon = (direction) => {
   return new L.DivIcon({
@@ -234,10 +262,11 @@ const translateStatus = (status) => {
 };
 
 // Komponens a térkép automatikus zoom-olásához
-function AutoFitBounds({ currentStopId, stopPosition }) {
+function AutoFitBounds({ currentStopId, stopPosition, userLocation }) {
   const map = useMap();
   const [lastStopId, setLastStopId] = useState(currentStopId);
   const [hasAutoFitted, setHasAutoFitted] = useState(false);
+  const [lastUserLocation, setLastUserLocation] = useState(null);
   
   useEffect(() => {
     // Ha új megálló lett kiválasztva, reseteljük az auto-fit státuszt
@@ -246,18 +275,27 @@ function AutoFitBounds({ currentStopId, stopPosition }) {
       setLastStopId(currentStopId);
     }
   }, [currentStopId, lastStopId]);
-  
+
   useEffect(() => {
-    if (!hasAutoFitted && stopPosition) {
-      // Egyszerűen a megállóra zoom-olunk, 3 szinttel kijebb a legközelebbi zoomtól
+    // Ha megváltozott a felhasználó pozíciója
+    if (userLocation && (!lastUserLocation || 
+        userLocation.lat !== lastUserLocation.lat || 
+        userLocation.lng !== lastUserLocation.lng)) {
+      map.setView([userLocation.lat, userLocation.lng], 15, {
+        animate: true,
+        duration: 1
+      });
+      setLastUserLocation(userLocation);
+    }
+    // Ha van megálló pozíció és még nem volt auto-fit
+    else if (!hasAutoFitted && stopPosition) {
       map.setView([stopPosition.lat, stopPosition.lng], 15, {
         animate: true,
         duration: 1
       });
-      
-      setHasAutoFitted(true); // Jelöljük, hogy már megtörtént az auto-fit
+      setHasAutoFitted(true);
     }
-  }, [stopPosition, map, hasAutoFitted]);
+  }, [stopPosition, userLocation, map, hasAutoFitted, lastUserLocation]);
   
   return null; // Ez egy invisible komponens
 }
@@ -279,6 +317,9 @@ function App() {
   const [currentStopPosition, setCurrentStopPosition] = useState(null);
   const [siblingStop, setSiblingStop] = useState(null);
   const [stopDirections, setStopDirections] = useState({});
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationPermission, setLocationPermission] = useState('prompt'); // 'prompt', 'granted', 'denied'
+  const [hasInitializedLocation, setHasInitializedLocation] = useState(false); // Új state a kezdeti betöltés követéséhez
   const searchContainerRef = useRef(null);
 
   const fetchDepartures = async () => {
@@ -651,12 +692,86 @@ function App() {
     }
   };
 
+  // Function to calculate distance between two points using Haversine formula
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in kilometers
+  };
+
+  // Function to get nearest stops to a location
+  const getNearestStops = (location, limit = 7) => {
+    if (!window.stopsPositions) return [];
+
+    const stopsWithDistances = Object.entries(window.stopsPositions)
+      .map(([stopId, position]) => ({
+        stopId: `BKK_${stopId}`,
+        position,
+        distance: calculateDistance(
+          location.lat,
+          location.lng,
+          position.lat,
+          position.lng
+        )
+      }))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, limit);
+
+    return stopsWithDistances;
+  };
+
+  // Function to request user's location and select nearest stop
+  const requestUserLocation = () => {
+    if (!navigator.geolocation) {
+      console.error('Geolocation is not supported by your browser');
+      setLocationPermission('denied');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const userPos = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        setUserLocation(userPos);
+        setLocationPermission('granted');
+
+        // Csak az első betöltésnél válasszuk ki a legközelebbi megállót
+        if (!hasInitializedLocation) {
+          const nearestStops = getNearestStops(userPos, 1);
+          if (nearestStops.length > 0) {
+            const nearestStop = nearestStops[0];
+            selectStop(nearestStop.stopId, await getStopName(nearestStop.stopId));
+          }
+          setHasInitializedLocation(true);
+        }
+      },
+      (error) => {
+        console.error('Error getting location:', error);
+        setLocationPermission('denied');
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0
+      }
+    );
+  };
+
   useEffect(() => {
     loadMainStopName(); // Load main stop name first
     loadStopPosition(currentStopId); // Load stop position
     loadStopDirection(currentStopId); // Load stop direction
     fetchDepartures();
     fetchVehiclePositions();
+    requestUserLocation(); // Request user location
     setCountdown(5);
     
     const fetchInterval = setInterval(() => {
@@ -684,6 +799,32 @@ function App() {
 
   // Search functionality
   const searchStops = async (query) => {
+    // If query is empty and we have user location, show nearest stops
+    if (query.length === 0 && userLocation) {
+      const nearestStops = getNearestStops(userLocation);
+      const results = await Promise.all(nearestStops.map(async stop => {
+        const stopName = await getStopName(stop.stopId);
+        // Ha 1 km-nél közelebb van, méterben jelenítjük meg
+        const distanceText = stop.distance < 1 
+          ? `${Math.round(stop.distance * 1000)}m`
+          : `${stop.distance.toFixed(1)}km`;
+        
+        // Megálló irányának lekérése
+        const direction = await loadStopDirection(stop.stopId);
+        
+        return {
+          stopId: stop.stopId,
+          stopName: stopName,
+          distanceText: distanceText,
+          direction: direction,
+          distance: stop.distance
+        };
+      }));
+      setSearchResults(results);
+      setShowSearchResults(true);
+      return;
+    }
+
     if (query.length < 3) {
       setSearchResults([]);
       setShowSearchResults(false);
@@ -736,13 +877,38 @@ function App() {
       
       for (const [stopId, stopName] of Object.entries(window.stopsData)) {
         if (stopName.toLowerCase().includes(queryLower)) {
+          const fullStopId = `BKK_${stopId}`;
+          // Megálló irányának lekérése
+          const direction = await loadStopDirection(fullStopId);
+          
           results.push({
-            stopId: `BKK_${stopId}`,
-            stopName: stopName
+            stopId: fullStopId,
+            stopName: stopName,
+            direction: direction,
+            // Ha van user lokáció, akkor távolságot is számolunk
+            ...(userLocation && window.stopsPositions[stopId] ? {
+              distance: calculateDistance(
+                userLocation.lat,
+                userLocation.lng,
+                window.stopsPositions[stopId].lat,
+                window.stopsPositions[stopId].lng
+              )
+            } : {})
           });
           
           if (results.length >= 10) break; // Limit results
         }
+      }
+      
+      // Ha van user lokáció, akkor hozzáadjuk a távolság szöveget
+      if (userLocation) {
+        results.forEach(result => {
+          if (result.distance !== undefined) {
+            result.distanceText = result.distance < 1 
+              ? `${Math.round(result.distance * 1000)}m`
+              : `${result.distance.toFixed(1)}km`;
+          }
+        });
       }
       
       setSearchResults(results);
@@ -1446,7 +1612,10 @@ function App() {
             value={searchQuery}
             onChange={handleSearchInput}
             onFocus={() => {
-              if (searchQuery.length >= 3) {
+              if (searchQuery.length === 0 && userLocation) {
+                // Ha üres a mező és van felhasználói lokáció, mutassuk a legközelebbi megállókat
+                searchStops('');
+              } else if (searchQuery.length >= 3) {
                 // Ha van elég karakter a kereső mezőben, futtassuk újra a keresést
                 searchStops(searchQuery);
                 setShowSearchResults(true);
@@ -1475,8 +1644,19 @@ function App() {
                 className="search-result-item"
                 onClick={() => selectStop(result.stopId, result.stopName)}
               >
-                <span className="stop-name">{result.stopName}</span>
-                <span className="stop-id">{result.stopId}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '20px', height: '20px', flexShrink: 0 }}
+                    dangerouslySetInnerHTML={{
+                      __html: createStopIcon(result.direction).options.html
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <span className="stop-name">{result.stopName}</span>
+                    <div style={{ fontSize: '0.8em', color: '#888' }}>
+                      {result.distanceText} • {result.stopId}
+                    </div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -1489,6 +1669,7 @@ function App() {
           <div className="dotmatrix-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '10px'}}>
             <div style={{textAlign: 'left'}}>
               <h1 style={{color: 'white', margin: 0}}>{mainStopName || currentStopId.replace('BKK_', '')}</h1>
+              
             </div>
             {siblingStop && (
               <div style={{textAlign: 'right'}}>
@@ -1507,6 +1688,7 @@ function App() {
             
         </div>
         {renderDotMatrixDisplay()}
+        <h6 style={{color: 'white', marginTop: '10px', marginBottom: '0'}}>{currentStopId}</h6>
       </div>
       
       {/* Map Display */}
@@ -1529,7 +1711,22 @@ function App() {
           <AutoFitBounds 
             currentStopId={currentStopId}
             stopPosition={currentStopPosition}
+            userLocation={userLocation}
           />
+
+          {/* User location marker */}
+          {userLocation && (
+            <Marker 
+              position={[userLocation.lat, userLocation.lng]}
+              icon={createUserLocationIcon()}
+            >
+              <Popup>
+                <div>
+                  <strong>Az Ön pozíciója</strong>
+                </div>
+              </Popup>
+            </Marker>
+          )}
 
           {/* Megálló marker */}
           {currentStopPosition && (
@@ -1698,3 +1895,4 @@ function App() {
 }
 
 export default App;
+
