@@ -765,9 +765,15 @@ function App() {
     setMainStopName(stopName);
     loadStopPosition(stopId); // Load new stop position
     loadStopDirection(stopId); // Load new stop direction
-    setSearchQuery('');
+    // Don't clear the search query - keep the text in the search field
     setShowSearchResults(false);
     setSearchResults([]);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowSearchResults(false);
   };
 
   const findSiblingStop = async () => {
@@ -1432,18 +1438,35 @@ function App() {
     <div className="app">
       {/* Search Input */}
       <div className="search-container" ref={searchContainerRef}>
-        <input
-          type="text"
-          className="search-input"
-          placeholder="Keresés megállók között... (min. 3 karakter)"
-          value={searchQuery}
-          onChange={handleSearchInput}
-          onFocus={() => {
-            if (searchResults.length > 0) {
-              setShowSearchResults(true);
-            }
-          }}
-        />
+        <div className="search-input-wrapper">
+          <input
+            type="text"
+            className="search-input"
+            placeholder="Keresés megállók között... (min. 3 karakter)"
+            value={searchQuery}
+            onChange={handleSearchInput}
+            onFocus={() => {
+              if (searchQuery.length >= 3) {
+                // Ha van elég karakter a kereső mezőben, futtassuk újra a keresést
+                searchStops(searchQuery);
+                setShowSearchResults(true);
+              } else if (searchResults.length > 0) {
+                // Ha nincs elég karakter, de vannak korábbi eredmények, azokat jelenítsük meg
+                setShowSearchResults(true);
+              }
+            }}
+          />
+          {searchQuery.length > 0 && (
+            <button
+              className="search-clear-button"
+              onClick={clearSearch}
+              type="button"
+              title="Keresés törlése"
+            >
+              ×
+            </button>
+          )}
+        </div>
         {showSearchResults && searchResults.length > 0 && (
           <div className="search-results">
             {searchResults.map((result, index) => (
