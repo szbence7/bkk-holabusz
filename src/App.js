@@ -180,7 +180,7 @@ const translateStatus = (status) => {
 };
 
 // Komponens a térkép automatikus zoom-olásához
-function AutoFitBounds({ vehicles, currentStopId, stopPosition }) {
+function AutoFitBounds({ currentStopId, stopPosition }) {
   const map = useMap();
   const [lastStopId, setLastStopId] = useState(currentStopId);
   const [hasAutoFitted, setHasAutoFitted] = useState(false);
@@ -194,38 +194,16 @@ function AutoFitBounds({ vehicles, currentStopId, stopPosition }) {
   }, [currentStopId, lastStopId]);
   
   useEffect(() => {
-    if (!hasAutoFitted && (vehicles.length > 0 || stopPosition)) {
-      // Ha vannak járművek, használjuk azokat a bounds-hoz
-      if (vehicles.length > 0) {
-        const allPoints = vehicles.map(v => [v.lat, v.lng]);
-        
-        // Ha van megálló pozíció is, adjuk hozzá
-        if (stopPosition) {
-          allPoints.push([stopPosition.lat, stopPosition.lng]);
-        }
-        
-        const bounds = L.latLngBounds(allPoints);
-        
-        // Kis padding a szélekhez
-        const paddedBounds = bounds.pad(0.1);
-        
-        map.fitBounds(paddedBounds, {
-          maxZoom: 15, // Maximum zoom szint
-          animate: true,
-          duration: 1
-        });
-      } 
-      // Ha nincs jármű, de van megálló pozíció, arra zoom-oljunk
-      else if (stopPosition) {
-        map.setView([stopPosition.lat, stopPosition.lng], 14, {
-          animate: true,
-          duration: 1
-        });
-      }
+    if (!hasAutoFitted && stopPosition) {
+      // Egyszerűen a megállóra zoom-olunk, 3 szinttel kijebb a legközelebbi zoomtól
+      map.setView([stopPosition.lat, stopPosition.lng], 15, {
+        animate: true,
+        duration: 1
+      });
       
       setHasAutoFitted(true); // Jelöljük, hogy már megtörtént az auto-fit
     }
-  }, [vehicles, stopPosition, map, hasAutoFitted]);
+  }, [stopPosition, map, hasAutoFitted]);
   
   return null; // Ez egy invisible komponens
 }
@@ -245,6 +223,7 @@ function App() {
   const [searchResults, setSearchResults] = useState([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [currentStopPosition, setCurrentStopPosition] = useState(null);
+  const [siblingStop, setSiblingStop] = useState(null);
   const searchContainerRef = useRef(null);
 
   const fetchDepartures = async () => {
@@ -324,6 +303,10 @@ function App() {
         
         console.log('Final departures:', departures);
         setDepartures(departures);
+        
+        // Find sibling stop
+        findSiblingStop();
+        
         setLastUpdated(new Date());
         setLoading(false);
         return; // Exit successfully
@@ -672,6 +655,101 @@ function App() {
     setSearchQuery('');
     setShowSearchResults(false);
     setSearchResults([]);
+  };
+
+  const findSiblingStop = async () => {
+    try {
+      // Load stops.txt if not already loaded
+      if (!window.stopsData) {
+        const response = await fetch('/stops.txt');
+        const text = await response.text();
+        const lines = text.split('\n');
+        
+        window.stopsData = {};
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (line) {
+            const parts = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let j = 0; j < line.length; j++) {
+              const char = line[j];
+              if (char === '"') {
+                inQuotes = !inQuotes;
+              } else if (char === ',' && !inQuotes) {
+                parts.push(current);
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+            parts.push(current);
+            
+            if (parts.length >= 2) {
+              const stopId = parts[0].replace(/"/g, '');
+              const stopName = parts[1].replace(/"/g, '');
+              window.stopsData[stopId] = stopName;
+            }
+          }
+        }
+      }
+
+      // Get current stop info
+      const cleanStopId = currentStopId.replace('BKK_', '');
+      const currentStopName = window.stopsData[cleanStopId] || mainStopName;
+      
+      if (currentStopName) {
+        // Extract the numeric part and prefix from stop ID
+        const match = cleanStopId.match(/^([A-Z]*)(\d+)$/);
+        if (match) {
+          const prefix = match[1]; // e.g., "F"
+          const number = parseInt(match[2]); // e.g., 4797
+          
+          // Check previous and next stop IDs
+          const prevStopId = `${prefix}${String(number - 1).padStart(match[2].length, '0')}`;
+          const nextStopId = `${prefix}${String(number + 1).padStart(match[2].length, '0')}`;
+          
+          console.log(`Checking sibling stops for ${cleanStopId}: ${prevStopId} and ${nextStopId}`);
+          
+          // Check if previous stop has the same name
+          const prevStopName = window.stopsData[prevStopId];
+          if (prevStopName === currentStopName) {
+            console.log(`Found sibling stop: ${prevStopId} (${prevStopName})`);
+            setSiblingStop({
+              id: `BKK_${prevStopId}`,
+              name: prevStopName
+            });
+            return;
+          }
+          
+          // Check if next stop has the same name
+          const nextStopName = window.stopsData[nextStopId];
+          if (nextStopName === currentStopName) {
+            console.log(`Found sibling stop: ${nextStopId} (${nextStopName})`);
+            setSiblingStop({
+              id: `BKK_${nextStopId}`,
+              name: nextStopName
+            });
+            return;
+          }
+        }
+        
+        console.log('No sibling stop found for', cleanStopId);
+        setSiblingStop(null);
+      } else {
+        setSiblingStop(null);
+      }
+    } catch (error) {
+      console.error('Error finding sibling stop:', error);
+      setSiblingStop(null);
+    }
+  };
+
+  const switchToSiblingStop = () => {
+    if (siblingStop) {
+      selectStop(siblingStop.id, siblingStop.name);
+    }
   };
 
   // Handle click outside search container
@@ -1271,7 +1349,18 @@ function App() {
 
       {/* Dotmatrix Display */}
       <div className="dotmatrix-container">
-        <h1 style={{color: 'white'}}>{mainStopName || currentStopId.replace('BKK_', '')}</h1>
+        <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+          <h1 style={{color: 'white'}}>{mainStopName || currentStopId.replace('BKK_', '')}</h1>
+          {siblingStop && (
+            <button 
+              onClick={switchToSiblingStop}
+              style={{background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px'}}
+              title={`Váltás a pár megállóra: ${siblingStop.name}`}
+            >
+              🔄
+            </button>
+          )}
+        </div>
         {renderDotMatrixDisplay()}
       </div>
       
@@ -1291,22 +1380,10 @@ function App() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
           
-          {/* Automatikus zoom a járművekre és megállóra */}
+          {/* Automatikus zoom a megállóra */}
           <AutoFitBounds 
             currentStopId={currentStopId}
             stopPosition={currentStopPosition}
-            vehicles={(() => {
-              const smartFilteredVehicles = vehiclePositions.filter(vehicle => {
-                const vehicleTripId = vehicle.tripId?.replace('BKK_', '') || '';
-                const tripIdMatch = departures.some(dep => {
-                  const depTripId = dep.tripId?.replace('BKK_', '') || '';
-                  return depTripId === vehicleTripId;
-                });
-                const routeIdMatch = departures.some(dep => dep.routeId === vehicle.routeId);
-                return tripIdMatch || routeIdMatch;
-              });
-              return smartFilteredVehicles;
-            })()} 
           />
 
           {/* Megálló marker */}
