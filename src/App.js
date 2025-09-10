@@ -1560,7 +1560,7 @@ function App() {
           const routeColumn = routeText.padEnd(4, ' ');
           
           // Column 2: Direction (mobilon rövidebb, asztali gépen megfelelő)
-          const directionMaxLength = window.innerWidth <= 768 ? 12 : 16;
+          const directionMaxLength = window.innerWidth <= 768 ? 8 : 16;
           const directionColumn = direction.substring(0, directionMaxLength).padEnd(directionMaxLength, ' ');
           
           // Column 3: Time (3 chars wide, right-aligned)
