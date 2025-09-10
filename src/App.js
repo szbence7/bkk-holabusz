@@ -35,11 +35,11 @@ const createVehicleIcon = (bearing, vehicleType, isNightBus = false) => {
         altText = 'Metro';
         break;
       case 'RAIL':
-        iconSrc = '/Budapest_hev_symbol.svg.png';
+        iconSrc = '/Bkkvonat.svg.png';
         altText = 'HEV';
         break;
-      case 'SUBURBAN _RAILWAY':
-        iconSrc = '/Budapest_hev_symbol.svg.png';
+      case 'SUBURBAN_RAILWAY':
+        iconSrc = '/Bkkvonat.svg.png';
         altText = 'HEV';
         break;
       case 'BUS':
@@ -398,7 +398,7 @@ function App() {
             minutesUntil: timeUntilDeparture,
             displayTime: timeUntilDeparture <= 0 ? 'MOST' : `${timeUntilDeparture} perc`,
             tripId: tripId, // Mentjük a trip ID-t is a vehicle pozíciók párosításához
-            vehicleType: route?.type || 'BUS', // Jármű típusa
+            vehicleType: route?.type || 'UNDEFINED', // Jármű típusa
             isNightBus: route?.color === '000000' || route?.style?.vehicleIcon?.name === 'night-bus' || route?.style?.groupId === 6 // Éjszakai busz ellenőrzés
           };
         })
@@ -655,6 +655,54 @@ function App() {
         if (currentStatusMatch) {
           vehicle.currentStatus = currentStatusMatch[1];
         }
+
+        // Extract vehicle type from route type in GTFS-RT data
+        const routeTypeMatch = entity.match(/route_type:\s*(\d+)/);
+        const routeIdForType = vehicle.rawRouteId?.replace('BKK_', '');
+        
+        // HÉV járatszámok: H5, H6, H7, H8, H9
+        const isHevByRouteId = /^H[5-9]$/.test(routeIdForType);
+        
+        if (isHevByRouteId) {
+          // Ha a járatszám alapján HÉV, akkor mindenképp RAIL típust adunk neki
+          vehicle.vehicleType = 'RAIL';
+          console.log(`Found HÉV by route ID: ${routeIdForType}, setting type to RAIL`);
+        } else if (routeTypeMatch) {
+          const routeType = parseInt(routeTypeMatch[1]);
+          console.log(`Vehicle ${vehicle.rawRouteId} route_type: ${routeType}`);
+          
+          // GTFS route_type values:
+          // 0: Tram, 1: Subway, 2: Rail, 3: Bus, 4: Ferry, 11: Trolleybus
+          // 109: Suburban Railway (HÉV) - Extended GTFS route types
+          switch (routeType) {
+            case 0:
+              vehicle.vehicleType = 'TRAM';
+              break;
+            case 1:
+              vehicle.vehicleType = 'SUBWAY';
+              break;
+            case 2:
+              vehicle.vehicleType = 'RAIL';
+              console.log(`Found HÉV by route_type: ${routeType}`);
+              break;
+            case 109:  // Extended GTFS type for Suburban Railway/HÉV
+              vehicle.vehicleType = 'SUBURBAN_RAILWAY';
+              console.log(`Found HÉV by route_type: ${routeType}`);
+              break;
+            case 11:
+              vehicle.vehicleType = 'TROLLEYBUS';
+              break;
+            case 3:
+            default:
+              vehicle.vehicleType = 'BUS';
+          }
+        } else {
+          vehicle.vehicleType = 'BUS'; // Default fallback
+        }
+        
+        // Log vehicle type determination
+        console.log(`Vehicle ${vehicle.rawRouteId} final type: ${vehicle.vehicleType} (isHev: ${isHevByRouteId})`);
+        
         
         const licensePlateMatch = entity.match(/license_plate:\s*"([^"]+)"/);
         if (licensePlateMatch) {
@@ -678,8 +726,7 @@ function App() {
         
         // Only add vehicles with required data
         if (vehicle.tripId && vehicle.lat && vehicle.lng) {
-          // Add vehicle type information - will be matched with departures later
-          vehicle.vehicleType = 'BUS'; // Default, will be updated when matched with departures
+          // Set isNightBus default (vehicleType was already set above)
           vehicle.isNightBus = false; // Default, will be updated when matched with departures
           vehicles.push(vehicle);
         }
@@ -1889,7 +1936,12 @@ function App() {
               dep.tripId?.replace('BKK_', '') === vehicle.tripId?.replace('BKK_', '')
             );
             
-            const vehicleType = matchingDeparture?.vehicleType || vehicle.vehicleType || 'BUS';
+            // Ha van egyező departure, frissítsük a jármű típusát
+            if (matchingDeparture) {
+              vehicle.vehicleType = matchingDeparture.vehicleType;
+            }
+            
+            const vehicleType = vehicle.vehicleType || 'BUS';
             const isNightBus = matchingDeparture?.isNightBus || vehicle.isNightBus || false;
             
             return (
@@ -1924,7 +1976,8 @@ function App() {
                             popupAltText = 'Metro';
                             break;
                           case 'RAIL':
-                            popupIconSrc = '/Budapest_hev_symbol.svg.png';
+                          case 'SUBURBAN_RAILWAY':
+                            popupIconSrc = '/Bkkvonat.svg.png';
                             popupAltText = 'HEV';
                             break;
                           case 'BUS':
@@ -1957,7 +2010,6 @@ function App() {
                   {vehicle.licensePlate && <div><strong>Rendszám:</strong> {vehicle.licensePlate}</div>}
                   {vehicle.vehicleModel && <div><strong>Típus:</strong> {vehicle.vehicleModel}</div>}
                   {vehicle.doorOpen !== undefined && <div><strong>Ajtók:</strong> {vehicle.doorOpen ? 'Nyitva' : 'Zárva'}</div>}
-                  {vehicle.bearing && <div><strong>Irány:</strong> {Math.round(vehicle.bearing)}°</div>}
                 </div>
               </Popup>
             </Marker>
