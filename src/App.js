@@ -117,8 +117,20 @@ const createUserLocationIcon = () => {
   });
 };
 
-// Custom stop icon - white circle with BKV blue border and direction triangle
-const createStopIcon = (direction) => {
+// Custom stop icon - white circle with colored border based on vehicle type and direction triangle
+const createStopIcon = (direction, vehicleType = 'BUS') => {
+  // Define border colors for different vehicle types
+  const borderColors = {
+    'TRAM': '#FFD700',     // Sárga a villamosnak
+    'TROLLEYBUS': '#FF0000', // Piros a trolinak
+    'RAIL': '#006F43',     // Visszafogott zöld a HÉV-nek
+    'SUBURBAN_RAILWAY': '#006F43', // Zöld a HÉV-nek (másik típusnév ugyanarra)
+    'BUS': '#009EE3',      // BKK kék az alapértelmezett busznak
+    'SUBWAY': '#009EE3',   // BKK kék a metrónak is
+  };
+
+  const borderColor = borderColors[vehicleType] || borderColors['BUS'];
+
   return new L.DivIcon({
     html: `
       <div style="
@@ -133,7 +145,7 @@ const createStopIcon = (direction) => {
           width: 16px;
           height: 16px;
           background-color: white;
-          border: 3px solid #1e88e5;
+          border: 3px solid ${borderColor};
           border-radius: 50%;
           box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         "></div>
@@ -882,12 +894,24 @@ function App() {
         // Megálló irányának lekérése
         const direction = await loadStopDirection(stop.stopId);
         
+        // Megálló típusának meghatározása a neve alapján
+        let vehicleType = 'BUS';
+        const stopNameLower = stopName.toLowerCase();
+        if (stopNameLower.includes('villamos')) {
+          vehicleType = 'TRAM';
+        } else if (stopNameLower.includes('hév') || stopNameLower.includes('h8') || stopNameLower.includes('h9')) {
+          vehicleType = 'RAIL';
+        } else if (stopNameLower.includes('troli') || stopNameLower.includes('trolibusz')) {
+          vehicleType = 'TROLLEYBUS';
+        }
+        
         return {
           stopId: stop.stopId,
           stopName: stopName,
           distanceText: distanceText,
           direction: direction,
-          distance: stop.distance
+          distance: stop.distance,
+          vehicleType: vehicleType
         };
       }));
       setSearchResults(results);
@@ -949,13 +973,25 @@ function App() {
         const normalizedStopName = normalizeText(stopName);
         if (normalizedStopName.includes(normalizedQuery)) {
           const fullStopId = `BKK_${stopId}`;
-          // Megálló irányának lekérése
+          // Megálló irányának és típusának lekérése
           const direction = await loadStopDirection(fullStopId);
+          
+          // Megálló típusának meghatározása a neve alapján
+          let vehicleType = 'BUS';
+          const stopNameLower = stopName.toLowerCase();
+          if (stopNameLower.includes('villamos')) {
+            vehicleType = 'TRAM';
+          } else if (stopNameLower.includes('hév') || stopNameLower.includes('h8') || stopNameLower.includes('h9')) {
+            vehicleType = 'RAIL';
+          } else if (stopNameLower.includes('troli') || stopNameLower.includes('trolibusz')) {
+            vehicleType = 'TROLLEYBUS';
+          }
           
           results.push({
             stopId: fullStopId,
             stopName: stopName,
             direction: direction,
+            vehicleType: vehicleType,
             // Ha van user lokáció, akkor távolságot is számolunk
             ...(userLocation && window.stopsPositions[stopId] ? {
               distance: calculateDistance(
@@ -1758,7 +1794,7 @@ function App() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <div style={{ width: '20px', height: '20px', flexShrink: 0 }}
                     dangerouslySetInnerHTML={{
-                      __html: createStopIcon(result.direction).options.html
+                      __html: createStopIcon(result.direction, result.vehicleType || 'BUS').options.html
                     }}
                   />
                   <div style={{ flex: 1 }}>
@@ -1863,7 +1899,7 @@ function App() {
           {currentStopPosition && (
             <Marker 
               position={[currentStopPosition.lat, currentStopPosition.lng]}
-              icon={createStopIcon(stopDirections[currentStopId])}
+              icon={createStopIcon(stopDirections[currentStopId], departures[0]?.vehicleType || 'BUS')}
             >
               <Popup>
                 <div>
