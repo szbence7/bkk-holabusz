@@ -38,6 +38,10 @@ const createVehicleIcon = (bearing, vehicleType, isNightBus = false) => {
         iconSrc = '/Budapest_hev_symbol.svg.png';
         altText = 'HEV';
         break;
+      case 'SUBURBAN _RAILWAY':
+        iconSrc = '/Budapest_hev_symbol.svg.png';
+        altText = 'HEV';
+        break;
       case 'BUS':
       default:
         iconSrc = '/BKV_busz_symbol.svg.png';
