@@ -1583,8 +1583,43 @@ function App() {
           // Column 1: Route number (4 chars wide, left-aligned)
           const routeColumn = routeText.padEnd(4, ' ');
           
-          // Column 2: Direction (mobilon rövidebb, asztali gépen megfelelő)
-          const directionMaxLength = window.innerWidth <= 768 ? 8 : 16;
+          // Column 2: Direction (dinamikusan számolt hossz a képernyő szélességétől függően)
+          const calculateDirectionLength = () => {
+            const screenWidth = window.innerWidth;
+            // Új számítás, nagyobb teret hagyunk a szövegnek
+            const totalPadding = 70; // 2*20px (container) + 2*15px (display)
+            
+            // Egy karakter teljes szélessége (karakter + pixel közötti rés)
+            const charFullWidth = 3.8; // Eredeti karakter szélesség
+            
+            // Fix oszlopok szélessége
+            const routeWidth = (4 + 1) * charFullWidth; // 4 karakter + 1 szóköz
+            const timeWidth = (3 + 1) * charFullWidth;  // 3 karakter + 1 szóköz
+            
+            // Rendelkezésre álló szélesség karaktereknek
+            const availableWidth = screenWidth - totalPadding - routeWidth - timeWidth;
+            
+            // Kiszámoljuk hány karakter fér el
+            let maxChars = Math.floor(availableWidth / charFullWidth);
+            
+            // Különböző iPhone modellek kezelése - csak a karakterszám korlátok változnak
+            if (screenWidth <= 375) { // iPhone SE, mini modellek
+              maxChars = Math.min(maxChars, 9);
+            } else if (screenWidth <= 390) { // iPhone 12, 13, 14, 15
+              maxChars = Math.min(maxChars, 9);
+            } else if (screenWidth <= 428) { // iPhone Pro Max modellek
+              maxChars = Math.min(maxChars, 10);
+            } else if (screenWidth <= 430) { // iPhone 16 Plus
+              maxChars = Math.min(maxChars, 12);
+            } else {
+              maxChars = Math.min(maxChars, 16); // Desktop és nagyobb képernyőkön több karakter
+            }
+            
+            // Minimum 6, maximum 20 karakter
+            return Math.max(6, Math.min(20, maxChars));
+          };
+          
+          const directionMaxLength = calculateDirectionLength();
           const directionColumn = direction.substring(0, directionMaxLength).padEnd(directionMaxLength, ' ');
           
           // Column 3: Time (3 chars wide, right-aligned)
