@@ -797,6 +797,23 @@ function App() {
     }
   }, [vehiclePositions]);
 
+  // Helper function to normalize text for searching
+  const normalizeText = (text) => {
+    return text
+      .toLowerCase()
+      // Replace Hungarian accented characters with their non-accented equivalents
+      .replace(/á/g, 'a')
+      .replace(/é/g, 'e')
+      .replace(/í/g, 'i')
+      .replace(/ó|ö|ő/g, 'o')
+      .replace(/ú|ü|ű/g, 'u')
+      // Replace special characters with spaces
+      .replace(/[-/]/g, ' ')
+      // Replace multiple spaces with a single space
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   // Search functionality
   const searchStops = async (query) => {
     // If query is empty and we have user location, show nearest stops
@@ -873,10 +890,11 @@ function App() {
 
       // Search through stops
       const results = [];
-      const queryLower = query.toLowerCase();
+      const normalizedQuery = normalizeText(query);
       
       for (const [stopId, stopName] of Object.entries(window.stopsData)) {
-        if (stopName.toLowerCase().includes(queryLower)) {
+        const normalizedStopName = normalizeText(stopName);
+        if (normalizedStopName.includes(normalizedQuery)) {
           const fullStopId = `BKK_${stopId}`;
           // Megálló irányának lekérése
           const direction = await loadStopDirection(fullStopId);
