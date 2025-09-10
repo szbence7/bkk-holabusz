@@ -313,6 +313,8 @@ function App() {
   const [currentStopId, setCurrentStopId] = useState(DEFAULT_STOP_ID);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [allSearchResults, setAllSearchResults] = useState([]); // Teljes találati lista
+  const [showAllResults, setShowAllResults] = useState(false); // Mutassuk-e az összes találatot
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [currentStopPosition, setCurrentStopPosition] = useState(null);
   const [siblingStop, setSiblingStop] = useState(null);
@@ -913,8 +915,6 @@ function App() {
               )
             } : {})
           });
-          
-          if (results.length >= 10) break; // Limit results
         }
       }
       
@@ -929,7 +929,11 @@ function App() {
         });
       }
       
-      setSearchResults(results);
+      // Tároljuk el az összes találatot
+      setAllSearchResults(results);
+      // Csak az első 10 találatot mutatjuk alapértelmezetten
+      setSearchResults(results.slice(0, 10));
+      setShowAllResults(false);
       setShowSearchResults(true);
     } catch (error) {
       console.error('Error searching stops:', error);
@@ -957,6 +961,8 @@ function App() {
   const clearSearch = () => {
     setSearchQuery('');
     setSearchResults([]);
+    setAllSearchResults([]);
+    setShowAllResults(false);
     setShowSearchResults(false);
   };
 
@@ -1656,7 +1662,8 @@ function App() {
         </div>
         {showSearchResults && searchResults.length > 0 && (
           <div className="search-results">
-            {searchResults.map((result, index) => (
+            {/* Találati lista */}
+            {(showAllResults ? allSearchResults : searchResults).map((result, index) => (
               <div
                 key={result.stopId}
                 className="search-result-item"
@@ -1677,6 +1684,26 @@ function App() {
                 </div>
               </div>
             ))}
+            
+            {/* "További találatok" gomb */}
+            {!showAllResults && allSearchResults.length > 10 && (
+              <div
+                className="search-result-item"
+                onClick={() => {
+                  setShowAllResults(true);
+                  setSearchResults(allSearchResults);
+                }}
+                style={{
+                  textAlign: 'center',
+                  color: '#1e88e5',
+                  cursor: 'pointer',
+                  padding: '10px',
+                  borderTop: '1px solid #eee'
+                }}
+              >
+                További {allSearchResults.length - 10} találat mutatása
+              </div>
+            )}
           </div>
         )}
       </div>
