@@ -1696,7 +1696,7 @@ function App() {
               maxChars = Math.min(maxChars, 9);
             } else if (screenWidth <= 428) { // iPhone Pro Max modellek
               maxChars = Math.min(maxChars, 10);
-            } else if (screenWidth <= 430) { // iPhone 16 Plus
+            } else if (screenWidth <= 440) { // iPhone 16 Plus
               maxChars = Math.min(maxChars, 12);
             } else {
               maxChars = Math.min(maxChars, 16); // Desktop és nagyobb képernyőkön több karakter
