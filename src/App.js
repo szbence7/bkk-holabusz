@@ -172,7 +172,7 @@ const createStopIcon = (direction, vehicleType = 'BUS') => {
 
 const BKK_API_BASE = 'https://futar.bkk.hu/api/query/v1/ws/otp/api/where';
 const DEFAULT_STOP_ID = 'BKK_F04797';
-const API_KEY = 'ca61c2f4-982e-4460-aebd-950c15434919';
+const API_KEY = process.env.REACT_APP_BKK_API_KEY;
 
 // Function to get stop name from local stops.txt file
 const getStopName = async (stopId) => {

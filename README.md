@@ -40,7 +40,9 @@ Az alkalmazás a BKK Futár API-t használja:
 1. Látogass el a BKK hivatalos weboldalára: https://bkk.hu
 2. Keress rá a "Fejlesztőknek" vagy "API" szakaszra
 3. Regisztrálj és kérj API kulcsot
-4. Miután megkaptad az API kulcsot, cseréld ki az `App.js` fájlban a `key=apaiary-test` részt a saját kulcsodra
+4. Miután megkaptad az API kulcsot, kövesd az alábbi lépéseket:
+   - Másold le a `.env.example` fájlt `.env` néven
+   - A `.env` fájlban cseréld ki a `your_api_key_here` részt a saját API kulcsoddal
 
 **Példa:**
 ```javascript
