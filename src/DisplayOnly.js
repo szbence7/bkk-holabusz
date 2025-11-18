@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import './App.css';
 
 const BKK_API_BASE = 'https://futar.bkk.hu/api/query/v1/ws/otp/api/where';
@@ -553,11 +553,13 @@ const createDotMatrixText = (text) => {
 
 function DisplayOnly() {
   const { stopId } = useParams();
+  const navigate = useNavigate();
   const fullStopId = stopId.startsWith('BKK_') ? stopId : `BKK_${stopId}`;
   
   const [departures, setDepartures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mainStopName, setMainStopName] = useState(null);
+  const [siblingStop, setSiblingStop] = useState(null);
 
   const fetchDepartures = async () => {
     try {
@@ -634,9 +636,105 @@ function DisplayOnly() {
     }
   };
 
+  const findSiblingStop = async () => {
+    try {
+      // Load stops.txt if not already loaded
+      if (!window.stopsData) {
+        const response = await fetch('/stops.txt');
+        const text = await response.text();
+        const lines = text.split('\n');
+        
+        window.stopsData = {};
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (line) {
+            const parts = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let j = 0; j < line.length; j++) {
+              const char = line[j];
+              if (char === '"') {
+                inQuotes = !inQuotes;
+              } else if (char === ',' && !inQuotes) {
+                parts.push(current);
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+            parts.push(current);
+            
+            if (parts.length >= 2) {
+              const stopId = parts[0].replace(/"/g, '');
+              const stopName = parts[1].replace(/"/g, '');
+              window.stopsData[stopId] = stopName;
+            }
+          }
+        }
+      }
+
+      // Get current stop info
+      const cleanStopId = fullStopId.replace('BKK_', '');
+      const currentStopName = window.stopsData[cleanStopId] || mainStopName;
+      
+      if (currentStopName) {
+        // Extract the numeric part and prefix from stop ID
+        const match = cleanStopId.match(/^([A-Z]*)(\d+)$/);
+        if (match) {
+          const prefix = match[1]; // e.g., "F"
+          const number = parseInt(match[2]); // e.g., 4797
+          
+          // Check previous and next stop IDs
+          const prevStopId = `${prefix}${String(number - 1).padStart(match[2].length, '0')}`;
+          const nextStopId = `${prefix}${String(number + 1).padStart(match[2].length, '0')}`;
+          
+          console.log(`Checking sibling stops for ${cleanStopId}: ${prevStopId} and ${nextStopId}`);
+          
+          // Check if previous stop has the same name
+          const prevStopName = window.stopsData[prevStopId];
+          if (prevStopName === currentStopName) {
+            console.log(`Found sibling stop: ${prevStopId} (${prevStopName})`);
+            setSiblingStop({
+              id: prevStopId,
+              name: prevStopName
+            });
+            return;
+          }
+          
+          // Check if next stop has the same name
+          const nextStopName = window.stopsData[nextStopId];
+          if (nextStopName === currentStopName) {
+            console.log(`Found sibling stop: ${nextStopId} (${nextStopName})`);
+            setSiblingStop({
+              id: nextStopId,
+              name: nextStopName
+            });
+            return;
+          }
+        }
+        
+        console.log('No sibling stop found for', cleanStopId);
+        setSiblingStop(null);
+      } else {
+        setSiblingStop(null);
+      }
+    } catch (error) {
+      console.error('Error finding sibling stop:', error);
+      setSiblingStop(null);
+    }
+  };
+
+  const switchToSiblingStop = () => {
+    if (siblingStop) {
+      navigate(`/${siblingStop.id}`);
+    }
+  };
+
   useEffect(() => {
     loadMainStopName();
     fetchDepartures();
+    findSiblingStop();
     
     const fetchInterval = setInterval(() => {
       fetchDepartures();
@@ -749,6 +847,19 @@ function DisplayOnly() {
             <div style={{textAlign: 'left'}}>
               <h1 style={{color: 'white', margin: 0}}>{mainStopName || fullStopId.replace('BKK_', '')}</h1>
             </div>
+            {siblingStop && (
+              <div style={{textAlign: 'right'}}>
+                <button 
+                  onClick={switchToSiblingStop}
+                  title={`Váltás a pár megállóra: ${siblingStop.name}`}
+                  style={{
+                    background: 'none',
+                  }}
+                >
+                🔄
+                </button>
+              </div>
+            )}
           </div>
         </div>
         {renderDotMatrixDisplay()}
