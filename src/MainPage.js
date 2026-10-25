@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import './App.css';
+import DotMatrixLine, { DotMatrixAlertLine } from './DotMatrixLine';
+import { punctuationGlyphs } from './dotMatrixGlyphs';
+import { getServiceAlertText } from './serviceAlerts';
 
 // Fix Leaflet marker icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -318,6 +321,7 @@ function AutoFitBounds({ currentStopId, stopPosition, userLocation }) {
 
 function MainPage() {
   const [departures, setDepartures] = useState([]);
+  const [alertText, setAlertText] = useState(''); // Forgalmi zavarok szövege a kijelző alsó sorába
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [countdown, setCountdown] = useState(5);
@@ -348,7 +352,7 @@ function MainPage() {
       console.log('Fetching departures...');
       
       const response = await fetch(
-        `${BKK_API_BASE}/arrivals-and-departures-for-stop.json?key=${API_KEY}&version=3&appVersion=apiary-1.0&includeReferences=routes,trips&stopId=${currentStopId}&minutesBefore=0&minutesAfter=60`
+        `${BKK_API_BASE}/arrivals-and-departures-for-stop.json?key=${API_KEY}&version=3&appVersion=apiary-1.0&includeReferences=routes,trips,alerts&stopId=${currentStopId}&minutesBefore=0&minutesAfter=60`
       );
       
       if (!response.ok) {
@@ -419,7 +423,8 @@ function MainPage() {
         
         console.log('Final departures:', departures);
         setDepartures(departures);
-        
+        setAlertText(getServiceAlertText(data));
+
         // Find sibling stop
         findSiblingStop();
         
@@ -434,6 +439,7 @@ function MainPage() {
       console.error('API error:', err);
       setError('Hiba az API lekérdezésben');
       setDepartures([]);
+      setAlertText('');
     } finally {
       setLoading(false);
     }
@@ -1595,7 +1601,8 @@ function MainPage() {
       [1,0,0,0,1],
       [1,0,0,0,1],
       [0,1,1,1,0]
-    ]
+    ],
+    ...punctuationGlyphs
   };
 
   const createDotMatrixText = (text) => {
@@ -1632,6 +1639,10 @@ function MainPage() {
     return matrix;
   };
 
+  const renderAlertLine = () => alertText && (
+    <DotMatrixAlertLine text={alertText} createDotMatrixText={createDotMatrixText} />
+  );
+
   const renderDotMatrixDisplay = () => {
     if (departures.length === 0) {
       const matrix = createDotMatrixText('NINCS JARAT');
@@ -1655,6 +1666,7 @@ function MainPage() {
               ))
             )}
           </div>
+          {renderAlertLine()}
         </div>
       );
     }
@@ -1666,82 +1678,22 @@ function MainPage() {
           const routeText = departure.routeId;
           const direction = departure.headsign || 'Kozpont';
           const timeText = departure.minutesUntil <= 0 ? "0'" : `${departure.minutesUntil}'`;
-          
-          // Column 1: Route number (4 chars wide, left-aligned)
-          const routeColumn = routeText.padEnd(4, ' ');
-          
-          // Column 2: Direction (dinamikusan számolt hossz a képernyő szélességétől függően)
-          const calculateDirectionLength = () => {
-            const screenWidth = window.innerWidth;
-            // Új számítás, nagyobb teret hagyunk a szövegnek
-            const totalPadding = 70; // 2*20px (container) + 2*15px (display)
-            
-            // Egy karakter teljes szélessége (karakter + pixel közötti rés)
-            const charFullWidth = 3.8; // Eredeti karakter szélesség
-            
-            // Fix oszlopok szélessége
-            const routeWidth = (4 + 1) * charFullWidth; // 4 karakter + 1 szóköz
-            const timeWidth = (3 + 1) * charFullWidth;  // 3 karakter + 1 szóköz
-            
-            // Rendelkezésre álló szélesség karaktereknek
-            const availableWidth = screenWidth - totalPadding - routeWidth - timeWidth;
-            
-            // Kiszámoljuk hány karakter fér el
-            let maxChars = Math.floor(availableWidth / charFullWidth);
-            
-            // Különböző iPhone modellek kezelése - csak a karakterszám korlátok változnak
-            if (screenWidth <= 375) { // iPhone SE, mini modellek
-              maxChars = Math.min(maxChars, 9);
-            } else if (screenWidth <= 390) { // iPhone 12, 13, 14, 15
-              maxChars = Math.min(maxChars, 9);
-            } else if (screenWidth <= 428) { // iPhone Pro Max modellek
-              maxChars = Math.min(maxChars, 10);
-            } else if (screenWidth <= 440) { // iPhone 16 Plus
-              maxChars = Math.min(maxChars, 12);
-            } else {
-              maxChars = Math.min(maxChars, 16); // Desktop és nagyobb képernyőkön több karakter
-            }
-            
-            // Minimum 6, maximum 20 karakter
-            return Math.max(6, Math.min(20, maxChars));
-          };
-          
-          const directionMaxLength = calculateDirectionLength();
-          const directionColumn = direction.substring(0, directionMaxLength).padEnd(directionMaxLength, ' ');
-          
-          // Column 3: Time (3 chars wide, right-aligned)
-          const timeColumn = timeText.padStart(3, ' ');
-          
-          // Combine all columns with single space separators
-          const text = `${routeColumn} ${directionColumn} ${timeColumn}`;
-          
-          const matrix = createDotMatrixText(text);
-          const gridColumns = matrix[0].length;
-          
+
           // Check if this bus is arriving now (0 minutes)
           const isArriving = departure.minutesUntil <= 0;
-          
+
           return (
-            <div key={index} className="dotmatrix-line">
-              <div 
-                className={`dotmatrix-grid ${isArriving ? 'blinking' : ''}`}
-                style={{
-                  gridTemplateColumns: `repeat(${gridColumns}, 3px)`,
-                  gridTemplateRows: 'repeat(7, 3px)'
-                }}
-              >
-                {matrix.map((row, rowIndex) => 
-                  row.map((pixel, pixelIndex) => (
-                    <div
-                      key={`${rowIndex}-${pixelIndex}`}
-                      className={`dotmatrix-pixel ${pixel ? 'lit' : 'unlit'}`}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
+            <DotMatrixLine
+              key={index}
+              route={routeText}
+              direction={direction}
+              time={timeText}
+              blinking={isArriving}
+              createDotMatrixText={createDotMatrixText}
+            />
           );
         })}
+        {renderAlertLine()}
       </div>
     );
   };

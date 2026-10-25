@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import './App.css';
+import DotMatrixLine, { DotMatrixAlertLine } from './DotMatrixLine';
+import { punctuationGlyphs } from './dotMatrixGlyphs';
+import { getServiceAlertText } from './serviceAlerts';
 
 const BKK_API_BASE = 'https://futar.bkk.hu/api/query/v1/ws/otp/api/where';
 const API_KEY = process.env.REACT_APP_BKK_API_KEY;
@@ -514,7 +517,8 @@ const dotMatrixFont = {
     [1,0,0,0,1],
     [1,0,0,0,1],
     [0,1,1,1,0]
-  ]
+  ],
+  ...punctuationGlyphs
 };
 
 const createDotMatrixText = (text) => {
@@ -557,6 +561,7 @@ function DisplayOnly() {
   const fullStopId = stopId.startsWith('BKK_') ? stopId : `BKK_${stopId}`;
   
   const [departures, setDepartures] = useState([]);
+  const [alertText, setAlertText] = useState('');
   const [loading, setLoading] = useState(true);
   const [mainStopName, setMainStopName] = useState(null);
   const [siblingStop, setSiblingStop] = useState(null);
@@ -566,7 +571,7 @@ function DisplayOnly() {
       setLoading(true);
       
       const response = await fetch(
-        `${BKK_API_BASE}/arrivals-and-departures-for-stop.json?key=${API_KEY}&version=3&appVersion=apiary-1.0&includeReferences=routes,trips&stopId=${fullStopId}&minutesBefore=0&minutesAfter=60`
+        `${BKK_API_BASE}/arrivals-and-departures-for-stop.json?key=${API_KEY}&version=3&appVersion=apiary-1.0&includeReferences=routes,trips,alerts&stopId=${fullStopId}&minutesBefore=0&minutesAfter=60`
       );
       
       if (!response.ok) {
@@ -616,12 +621,14 @@ function DisplayOnly() {
         .sort((a, b) => a.minutesUntil - b.minutesUntil);
         
         setDepartures(departures);
+        setAlertText(getServiceAlertText(data));
         setLoading(false);
       }
-      
+
     } catch (err) {
       console.error('API error:', err);
       setDepartures([]);
+      setAlertText('');
       setLoading(false);
     }
   };
@@ -745,6 +752,10 @@ function DisplayOnly() {
     };
   }, [fullStopId]);
 
+  const renderAlertLine = () => alertText && (
+    <DotMatrixAlertLine text={alertText} createDotMatrixText={createDotMatrixText} />
+  );
+
   const renderDotMatrixDisplay = () => {
     if (departures.length === 0) {
       const matrix = createDotMatrixText('NINCS JARAT');
@@ -768,6 +779,7 @@ function DisplayOnly() {
               ))
             )}
           </div>
+          {renderAlertLine()}
         </div>
       );
     }
@@ -779,62 +791,20 @@ function DisplayOnly() {
           const direction = departure.headsign || 'Kozpont';
           const timeText = departure.minutesUntil <= 0 ? "0'" : `${departure.minutesUntil}'`;
           
-          const routeColumn = routeText.padEnd(4, ' ');
-          
-          const calculateDirectionLength = () => {
-            const screenWidth = window.innerWidth;
-            const totalPadding = 70;
-            const charFullWidth = 3.8;
-            const routeWidth = (4 + 1) * charFullWidth;
-            const timeWidth = (3 + 1) * charFullWidth;
-            const availableWidth = screenWidth - totalPadding - routeWidth - timeWidth;
-            let maxChars = Math.floor(availableWidth / charFullWidth);
-            
-            if (screenWidth <= 375) {
-              maxChars = Math.min(maxChars, 9);
-            } else if (screenWidth <= 390) {
-              maxChars = Math.min(maxChars, 9);
-            } else if (screenWidth <= 428) {
-              maxChars = Math.min(maxChars, 10);
-            } else if (screenWidth <= 440) {
-              maxChars = Math.min(maxChars, 12);
-            } else {
-              maxChars = Math.min(maxChars, 16);
-            }
-            
-            return Math.max(6, Math.min(20, maxChars));
-          };
-          
-          const directionMaxLength = calculateDirectionLength();
-          const directionColumn = direction.substring(0, directionMaxLength).padEnd(directionMaxLength, ' ');
-          const timeColumn = timeText.padStart(3, ' ');
-          const text = `${routeColumn} ${directionColumn} ${timeColumn}`;
-          
-          const matrix = createDotMatrixText(text);
-          const gridColumns = matrix[0].length;
           const isArriving = departure.minutesUntil <= 0;
-          
+
           return (
-            <div key={index} className="dotmatrix-line">
-              <div 
-                className={`dotmatrix-grid ${isArriving ? 'blinking' : ''}`}
-                style={{
-                  gridTemplateColumns: `repeat(${gridColumns}, 3px)`,
-                  gridTemplateRows: 'repeat(7, 3px)'
-                }}
-              >
-                {matrix.map((row, rowIndex) => 
-                  row.map((pixel, pixelIndex) => (
-                    <div
-                      key={`${rowIndex}-${pixelIndex}`}
-                      className={`dotmatrix-pixel ${pixel ? 'lit' : 'unlit'}`}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
+            <DotMatrixLine
+              key={index}
+              route={routeText}
+              direction={direction}
+              time={timeText}
+              blinking={isArriving}
+              createDotMatrixText={createDotMatrixText}
+            />
           );
         })}
+        {renderAlertLine()}
       </div>
     );
   };

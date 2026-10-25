@@ -200,6 +200,57 @@ button:hover {
   border-radius: 0.5px;
 }
 
+/* Három oszlopos sor: fix viszonylat | görgethető végállomás | fix perc */
+.dotmatrix-row {
+  display: flex;
+  align-items: flex-start;
+  background-color: #000;
+  padding: 5px;
+  border-radius: 2px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dotmatrix-row .dotmatrix-segment {
+  padding: 0;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.dotmatrix-marquee {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dotmatrix-marquee-track,
+.dotmatrix-marquee-unit {
+  display: flex;
+  width: max-content;
+}
+
+/* Forgalmi zavar sor a kijelző alján */
+.dotmatrix-alert-line {
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 1px solid #222;
+}
+
+@keyframes dotmatrix-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dotmatrix-marquee-track {
+    animation: none !important;
+  }
+}
+
 /* Mobile dotmatrix optimalizálás */
 @media (max-width: 768px) {
   .dotmatrix-display {
@@ -207,7 +258,8 @@ button:hover {
     overflow-x: visible; /* Nincs scroll, minden elféren */
   }
   
-  .dotmatrix-grid {
+  .dotmatrix-grid,
+  .dotmatrix-row {
     gap: 0.2px;
     padding: 2px;
   }
@@ -231,7 +283,8 @@ button:hover {
     border-radius: 0.1px;
   }
   
-  .dotmatrix-grid {
+  .dotmatrix-grid,
+  .dotmatrix-row {
     gap: 0.1px;
     padding: 1px;
   }
@@ -265,7 +318,8 @@ button:hover {
 }
 
 /* Blinking animation for arriving buses */
-.dotmatrix-grid.blinking {
+.dotmatrix-grid.blinking,
+.dotmatrix-row.blinking {
   animation: blink 1s infinite;
 }
 
