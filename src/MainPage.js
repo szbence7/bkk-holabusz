@@ -343,6 +343,7 @@ function MainPage() {
   const [locationPermission, setLocationPermission] = useState('prompt'); // 'prompt', 'granted', 'denied'
   const [hasInitializedLocation, setHasInitializedLocation] = useState(false); // Új state a kezdeti betöltés követéséhez
   const searchContainerRef = useRef(null);
+  const searchRequestIdRef = useRef(0);
 
   const fetchDepartures = async () => {
     try {
@@ -879,14 +880,30 @@ function MainPage() {
       .replace(/ó|ö|ő/g, 'o')
       .replace(/ú|ü|ű/g, 'u')
       // Replace special characters with spaces
-      .replace(/[-/]/g, ' ')
+      .replace(/[-/,.()"]/g, ' ')
       // Replace multiple spaces with a single space
       .replace(/\s+/g, ' ')
       .trim();
   };
 
+  // Megálló típusának meghatározása a neve alapján
+  const getVehicleTypeFromName = (stopName) => {
+    const stopNameLower = stopName.toLowerCase();
+    if (stopNameLower.includes('villamos')) {
+      return 'TRAM';
+    } else if (stopNameLower.includes('hév') || stopNameLower.includes('h8') || stopNameLower.includes('h9')) {
+      return 'RAIL';
+    } else if (stopNameLower.includes('troli') || stopNameLower.includes('trolibusz')) {
+      return 'TROLLEYBUS';
+    }
+    return 'BUS';
+  };
+
   // Search functionality
   const searchStops = async (query) => {
+    // Minden keresés kap egy azonosítót, hogy a későn beérkező, elavult eredmények ne írják felül az újabbakat
+    const requestId = ++searchRequestIdRef.current;
+
     // If query is empty and we have user location, show nearest stops
     if (query.length === 0 && userLocation) {
       const nearestStops = getNearestStops(userLocation);
@@ -899,27 +916,19 @@ function MainPage() {
         
         // Megálló irányának lekérése
         const direction = await loadStopDirection(stop.stopId);
-        
-        // Megálló típusának meghatározása a neve alapján
-        let vehicleType = 'BUS';
-        const stopNameLower = stopName.toLowerCase();
-        if (stopNameLower.includes('villamos')) {
-          vehicleType = 'TRAM';
-        } else if (stopNameLower.includes('hév') || stopNameLower.includes('h8') || stopNameLower.includes('h9')) {
-          vehicleType = 'RAIL';
-        } else if (stopNameLower.includes('troli') || stopNameLower.includes('trolibusz')) {
-          vehicleType = 'TROLLEYBUS';
-        }
-        
+
         return {
           stopId: stop.stopId,
           stopName: stopName,
           distanceText: distanceText,
           direction: direction,
           distance: stop.distance,
-          vehicleType: vehicleType
+          vehicleType: getVehicleTypeFromName(stopName)
         };
       }));
+      if (requestId !== searchRequestIdRef.current) return;
+      setAllSearchResults(results);
+      setShowAllResults(false);
       setSearchResults(results);
       setShowSearchResults(true);
       return;
@@ -933,13 +942,14 @@ function MainPage() {
 
     try {
       // Initialize stops data if not loaded yet
-      if (!window.stopsData) {
+      if (!window.stopsData || !window.stopsPositions) {
         const response = await fetch('/stops.txt');
         const text = await response.text();
         const lines = text.split('\n');
-        
+
         // Parse CSV data properly handling quoted strings
         window.stopsData = {};
+        window.stopsPositions = {};
         for (let i = 1; i < lines.length; i++) { // Skip header
           const line = lines[i].trim();
           if (line) {
@@ -965,7 +975,12 @@ function MainPage() {
             if (parts.length >= 2) {
               const stopIdFromFile = parts[0].replace(/"/g, ''); // Remove quotes
               const stopName = parts[1].replace(/"/g, ''); // Remove quotes
+              const stopLat = parseFloat(parts[2]);
+              const stopLon = parseFloat(parts[3]);
               window.stopsData[stopIdFromFile] = stopName;
+              if (!isNaN(stopLat) && !isNaN(stopLon)) {
+                window.stopsPositions[stopIdFromFile] = { lat: stopLat, lng: stopLon };
+              }
             }
           }
         }
@@ -974,62 +989,77 @@ function MainPage() {
       // Search through stops
       const results = [];
       const normalizedQuery = normalizeText(query);
-      
+      // Minden beírt szónak szerepelnie kell a megálló nevében (sorrendtől függetlenül)
+      const queryWords = normalizedQuery.split(' ').filter(Boolean);
+
       for (const [stopId, stopName] of Object.entries(window.stopsData)) {
         const normalizedStopName = normalizeText(stopName);
-        if (normalizedStopName.includes(normalizedQuery)) {
-          const fullStopId = `BKK_${stopId}`;
-          // Megálló irányának és típusának lekérése
-          const direction = await loadStopDirection(fullStopId);
-          
-          // Megálló típusának meghatározása a neve alapján
-          let vehicleType = 'BUS';
-          const stopNameLower = stopName.toLowerCase();
-          if (stopNameLower.includes('villamos')) {
-            vehicleType = 'TRAM';
-          } else if (stopNameLower.includes('hév') || stopNameLower.includes('h8') || stopNameLower.includes('h9')) {
-            vehicleType = 'RAIL';
-          } else if (stopNameLower.includes('troli') || stopNameLower.includes('trolibusz')) {
-            vehicleType = 'TROLLEYBUS';
-          }
-          
-          results.push({
-            stopId: fullStopId,
-            stopName: stopName,
-            direction: direction,
-            vehicleType: vehicleType,
-            // Ha van user lokáció, akkor távolságot is számolunk
-            ...(userLocation && window.stopsPositions[stopId] ? {
-              distance: calculateDistance(
-                userLocation.lat,
-                userLocation.lng,
-                window.stopsPositions[stopId].lat,
-                window.stopsPositions[stopId].lng
-              )
-            } : {})
-          });
+        const nameWords = normalizedStopName.split(' ');
+        const isMatch = normalizedStopName.includes(normalizedQuery) ||
+          queryWords.every(qw => nameWords.some(nw => nw.startsWith(qw)));
+        if (!isMatch) continue;
+
+        // Relevancia: 0 = pontos egyezés, 1 = a név a keresett szöveggel kezdődik / a végén áll
+        // (pl. "Solymár, Templom tér"), 2 = egyéb találat
+        let relevance = 2;
+        if (normalizedStopName === normalizedQuery) {
+          relevance = 0;
+        } else if (normalizedStopName.startsWith(normalizedQuery) || normalizedStopName.endsWith(` ${normalizedQuery}`)) {
+          relevance = 1;
         }
-      }
-      
-      // Ha van user lokáció, akkor hozzáadjuk a távolság szöveget
-      if (userLocation) {
-        results.forEach(result => {
-          if (result.distance !== undefined) {
-            result.distanceText = result.distance < 1 
-              ? `${Math.round(result.distance * 1000)}m`
-              : `${result.distance.toFixed(1)}km`;
-          }
+
+        const position = window.stopsPositions?.[stopId];
+        const distance = userLocation && position
+          ? calculateDistance(userLocation.lat, userLocation.lng, position.lat, position.lng)
+          : undefined;
+
+        results.push({
+          stopId: `BKK_${stopId}`,
+          stopName: stopName,
+          direction: stopDirections[`BKK_${stopId}`] ?? null,
+          vehicleType: getVehicleTypeFromName(stopName),
+          relevance: relevance,
+          ...(distance !== undefined ? {
+            distance: distance,
+            distanceText: distance < 1
+              ? `${Math.round(distance * 1000)}m`
+              : `${distance.toFixed(1)}km`
+          } : {})
         });
       }
-      
+
+      // Rendezés: ha van lokáció, a legközelebbi elöl; különben relevancia, majd név szerint
+      results.sort((a, b) => {
+        if (a.distance !== undefined && b.distance !== undefined) {
+          return a.distance - b.distance;
+        }
+        if (a.distance !== undefined) return -1;
+        if (b.distance !== undefined) return 1;
+        return a.relevance - b.relevance || a.stopName.localeCompare(b.stopName, 'hu');
+      });
+
+      // Ha közben újabb keresés indult, ezt az eredményt eldobjuk
+      if (requestId !== searchRequestIdRef.current) return;
+
       // Tároljuk el az összes találatot
       setAllSearchResults(results);
       // Csak az első 10 találatot mutatjuk alapértelmezetten
       setSearchResults(results.slice(0, 10));
       setShowAllResults(false);
       setShowSearchResults(true);
+
+      // Irányok betöltése párhuzamosan az első találatokhoz (ikonok forgatásához)
+      const topResults = results.slice(0, 30);
+      const directions = await Promise.all(topResults.map(r => loadStopDirection(r.stopId)));
+      if (requestId !== searchRequestIdRef.current) return;
+      const withDirections = results.map((r, i) =>
+        i < topResults.length && directions[i] != null ? { ...r, direction: directions[i] } : r
+      );
+      setAllSearchResults(withDirections);
+      setSearchResults(prev => withDirections.slice(0, Math.max(prev.length, 10)));
     } catch (error) {
       console.error('Error searching stops:', error);
+      if (requestId !== searchRequestIdRef.current) return;
       setSearchResults([]);
       setShowSearchResults(false);
     }
@@ -1052,6 +1082,7 @@ function MainPage() {
   };
 
   const clearSearch = () => {
+    searchRequestIdRef.current++; // Folyamatban lévő keresések eredményét eldobjuk
     setSearchQuery('');
     setSearchResults([]);
     setAllSearchResults([]);
