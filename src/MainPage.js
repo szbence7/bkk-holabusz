@@ -267,6 +267,44 @@ const getStopName = async (stopId) => {
   }
 };
 
+// Járattípusonkénti alapszínek, ha az API nem ad színt
+const ROUTE_TYPE_COLORS = {
+  BUS: { color: '009FE3', textColor: 'FFFFFF' },
+  TRAM: { color: 'FFD800', textColor: '000000' },
+  TROLLEYBUS: { color: 'FF1609', textColor: 'FFFFFF' },
+  SUBWAY: { color: '333333', textColor: 'FFFFFF' },
+  RAIL: { color: '009B3A', textColor: 'FFFFFF' },
+  FERRY: { color: 'E50475', textColor: 'FFFFFF' }
+};
+const ROUTE_TYPE_ORDER = ['SUBWAY', 'RAIL', 'TRAM', 'TROLLEYBUS', 'BUS', 'FERRY'];
+
+// A megálló routeIds listájából badge adatok (viszonylatszám + BKK színek), típus és szám szerint rendezve
+const getRouteBadges = (routeIds = [], routeRefs = {}) => {
+  const seen = new Set();
+  const badges = [];
+  for (const routeId of routeIds) {
+    const route = routeRefs[routeId];
+    const shortName = route?.shortName || routeId.replace('BKK_', '');
+    if (seen.has(shortName)) continue;
+    seen.add(shortName);
+    const fallback = ROUTE_TYPE_COLORS[route?.type] || ROUTE_TYPE_COLORS.BUS;
+    badges.push({
+      shortName,
+      type: route?.type || 'BUS',
+      color: `#${route?.color || fallback.color}`,
+      textColor: `#${route?.textColor || fallback.textColor}`
+    });
+  }
+  const typeRank = (type) => {
+    const rank = ROUTE_TYPE_ORDER.indexOf(type);
+    return rank === -1 ? ROUTE_TYPE_ORDER.length : rank;
+  };
+  return badges.sort((a, b) =>
+    typeRank(a.type) - typeRank(b.type) ||
+    a.shortName.localeCompare(b.shortName, 'hu', { numeric: true })
+  );
+};
+
 // Function to translate current status
 const translateStatus = (status) => {
   const statusTranslations = {
@@ -369,6 +407,7 @@ function MainPage() {
   const [currentStopPosition, setCurrentStopPosition] = useState(null);
   const [siblingStop, setSiblingStop] = useState(null);
   const [stopDirections, setStopDirections] = useState({});
+  const [stopRoutes, setStopRoutes] = useState({}); // stopId -> járat badge-ek a találati listához
   const [userLocation, setUserLocation] = useState(null);
   const [locationPermission, setLocationPermission] = useState('prompt'); // 'prompt', 'granted', 'denied'
   const [hasInitializedLocation, setHasInitializedLocation] = useState(false); // Új state a kezdeti betöltés követéséhez
@@ -558,8 +597,8 @@ function MainPage() {
 
   const loadStopDirection = async (stopId) => {
     try {
-      // Check if we already have the direction cached
-      if (stopDirections[stopId]) {
+      // Check if we already have the direction (and the routes) cached
+      if (stopDirections[stopId] && stopRoutes[stopId]) {
         return stopDirections[stopId];
       }
 
@@ -572,16 +611,25 @@ function MainPage() {
 
       // Fetch stop details from BKK API
       const response = await fetch(
-        `${BKK_API_BASE}/stops-for-location.json?key=${API_KEY}&version=3&appVersion=apiary-1.0&lat=${position.lat}&lon=${position.lng}&radius=50`
+        `${BKK_API_BASE}/stops-for-location.json?key=${API_KEY}&version=3&appVersion=apiary-1.0&lat=${position.lat}&lon=${position.lng}&radius=50&includeReferences=routes`
       );
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data.status === 'OK' && data.data?.list) {
+        // A megállóban megálló járatok eltárolása (a közeli megállókét is, ha már úgyis megjöttek)
+        const routeRefs = data.data.references?.routes || {};
+        const newStopRoutes = {};
+        for (const s of data.data.list) {
+          newStopRoutes[s.id] = getRouteBadges(s.routeIds, routeRefs);
+        }
+        setStopRoutes(prev => ({ ...prev, ...newStopRoutes }));
+
+
         // Find the exact stop by ID
         const stop = data.data.list.find(s => s.id === stopId);
         if (stop && stop.direction) {
@@ -1812,8 +1860,17 @@ function MainPage() {
                   />
                   <div style={{ flex: 1 }}>
                     <span className="stop-name">{result.stopName}</span>
-                    <div style={{ fontSize: '0.8em', color: '#888' }}>
-                      {result.distanceText} • {result.stopId}
+                    <div className="search-result-meta">
+                      <span>{result.distanceText} • {result.stopId}</span>
+                      {stopRoutes[result.stopId]?.map(route => (
+                        <span
+                          key={route.shortName}
+                          className="route-badge"
+                          style={{ backgroundColor: route.color, color: route.textColor }}
+                        >
+                          {route.shortName}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 </div>
