@@ -280,43 +280,73 @@ const translateStatus = (status) => {
   return statusTranslations[status] || status;
 };
 
-// Komponens a térkép automatikus zoom-olásához
-function AutoFitBounds({ currentStopId, stopPosition, userLocation }) {
+// Komponens a térkép automatikus zoom-olásához: mindig a kiválasztott megállót teszi középre.
+// A felhasználó pozíciójának változása nem mozgatja a térképet (arra a lokátor gomb való).
+function AutoFitBounds({ stopPosition }) {
   const map = useMap();
-  const [lastStopId, setLastStopId] = useState(currentStopId);
-  const [hasAutoFitted, setHasAutoFitted] = useState(false);
-  const [lastUserLocation, setLastUserLocation] = useState(null);
-  
-  useEffect(() => {
-    // Ha új megálló lett kiválasztva, reseteljük az auto-fit státuszt
-    if (currentStopId !== lastStopId) {
-      setHasAutoFitted(false);
-      setLastStopId(currentStopId);
-    }
-  }, [currentStopId, lastStopId]);
+
+  const lat = stopPosition?.lat;
+  const lng = stopPosition?.lng;
 
   useEffect(() => {
-    // Ha megváltozott a felhasználó pozíciója
-    if (userLocation && (!lastUserLocation || 
-        userLocation.lat !== lastUserLocation.lat || 
-        userLocation.lng !== lastUserLocation.lng)) {
-      map.setView([userLocation.lat, userLocation.lng], 15, {
+    if (lat !== undefined && lng !== undefined) {
+      map.setView([lat, lng], 15, {
         animate: true,
         duration: 1
       });
-      setLastUserLocation(userLocation);
     }
-    // Ha van megálló pozíció és még nem volt auto-fit
-    else if (!hasAutoFitted && stopPosition) {
-      map.setView([stopPosition.lat, stopPosition.lng], 15, {
-        animate: true,
-        duration: 1
-      });
-      setHasAutoFitted(true);
-    }
-  }, [stopPosition, userLocation, map, hasAutoFitted, lastUserLocation]);
-  
+  }, [lat, lng, map]);
+
   return null; // Ez egy invisible komponens
+}
+
+// Lokátor gomb a térkép bal alsó sarkában: a felhasználó pozíciójára viszi a térképet
+function LocateButton({ userLocation, onRequestLocation }) {
+  const map = useMap();
+  const buttonRef = useRef(null);
+
+  useEffect(() => {
+    // Ne kattintson/görgessen át a térképre a gombról
+    if (buttonRef.current) {
+      L.DomEvent.disableClickPropagation(buttonRef.current);
+      L.DomEvent.disableScrollPropagation(buttonRef.current);
+    }
+  }, []);
+
+  const handleClick = () => {
+    if (userLocation) {
+      map.setView([userLocation.lat, userLocation.lng], 16, {
+        animate: true,
+        duration: 1
+      });
+    } else {
+      onRequestLocation();
+    }
+  };
+
+  return (
+    <div className="leaflet-bottom leaflet-left">
+      <div className="leaflet-control leaflet-bar">
+        <button
+          ref={buttonRef}
+          type="button"
+          title="Saját pozícióm"
+          aria-label="Saját pozícióm"
+          onClick={handleClick}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px', padding: 0, border: 'none', borderRadius: '4px', background: 'white', cursor: 'pointer' }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="7" />
+            <circle cx="12" cy="12" r="2.5" fill="#1e88e5" stroke="#1e88e5" />
+            <line x1="12" y1="1" x2="12" y2="5" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="1" y1="12" x2="5" y2="12" />
+            <line x1="19" y1="12" x2="23" y2="12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function MainPage() {
@@ -1858,11 +1888,10 @@ function MainPage() {
           />
           
           {/* Automatikus zoom a megállóra */}
-          <AutoFitBounds 
-            currentStopId={currentStopId}
-            stopPosition={currentStopPosition}
-            userLocation={userLocation}
-          />
+          <AutoFitBounds stopPosition={currentStopPosition} />
+
+          {/* Lokátor gomb bal alul */}
+          <LocateButton userLocation={userLocation} onRequestLocation={requestUserLocation} />
 
           {/* User location marker */}
           {userLocation && (
