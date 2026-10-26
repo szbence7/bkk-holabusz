@@ -5,6 +5,7 @@ import './App.css';
 import DotMatrixLine, { DotMatrixAlertLine } from './DotMatrixLine';
 import { punctuationGlyphs } from './dotMatrixGlyphs';
 import { getServiceAlertText } from './serviceAlerts';
+import { applyLoopHeadsigns } from './loopHeadsign';
 
 // Fix Leaflet marker icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -484,6 +485,8 @@ function MainPage() {
             minutesUntil: timeUntilDeparture,
             displayTime: timeUntilDeparture <= 0 ? 'MOST' : `${timeUntilDeparture} perc`,
             tripId: tripId, // Mentjük a trip ID-t is a vehicle pozíciók párosításához
+            routeKey: routeId, // Nyers routeId a körjárat-célállomás cache-hez
+            stopSequence: stopTime.stopSequence,
             vehicleType: route?.type || 'UNDEFINED', // Jármű típusa
             isNightBus: route?.color === '000000' || route?.style?.vehicleIcon?.name === 'night-bus' || route?.style?.groupId === 6 // Éjszakai busz ellenőrzés
           };
@@ -491,8 +494,10 @@ function MainPage() {
         .filter(dep => dep.minutesUntil >= 0 && dep.minutesUntil <= 60)
         .sort((a, b) => a.minutesUntil - b.minutesUntil);
         
-        console.log('Final departures:', departures);
-        setDepartures(departures);
+        const resolvedDepartures = await applyLoopHeadsigns(departures, currentStopId, API_KEY);
+
+        console.log('Final departures:', resolvedDepartures);
+        setDepartures(resolvedDepartures);
         setAlertText(getServiceAlertText(data));
 
         // Find sibling stop

@@ -4,6 +4,7 @@ import './App.css';
 import DotMatrixLine, { DotMatrixAlertLine } from './DotMatrixLine';
 import { punctuationGlyphs } from './dotMatrixGlyphs';
 import { getServiceAlertText } from './serviceAlerts';
+import { applyLoopHeadsigns } from './loopHeadsign';
 
 const BKK_API_BASE = 'https://futar.bkk.hu/api/query/v1/ws/otp/api/where';
 const API_KEY = process.env.REACT_APP_BKK_API_KEY;
@@ -613,6 +614,8 @@ function DisplayOnly() {
             minutesUntil: timeUntilDeparture,
             displayTime: timeUntilDeparture <= 0 ? 'MOST' : `${timeUntilDeparture} perc`,
             tripId: tripId,
+            routeKey: routeId,
+            stopSequence: stopTime.stopSequence,
             vehicleType: route?.type || 'UNDEFINED',
             isNightBus: route?.color === '000000' || route?.style?.vehicleIcon?.name === 'night-bus' || route?.style?.groupId === 6
           };
@@ -620,7 +623,7 @@ function DisplayOnly() {
         .filter(dep => dep.minutesUntil >= 0 && dep.minutesUntil <= 60)
         .sort((a, b) => a.minutesUntil - b.minutesUntil);
         
-        setDepartures(departures);
+        setDepartures(await applyLoopHeadsigns(departures, fullStopId, API_KEY));
         setAlertText(getServiceAlertText(data));
         setLoading(false);
       }
